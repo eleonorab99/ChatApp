@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Box,
   TextField,
@@ -6,20 +6,19 @@ import {
   Paper,
   Tooltip,
   InputAdornment,
-} from '@mui/material';
+} from "@mui/material";
 import {
   Send as SendIcon,
-  AttachFile as AttachFileIcon,
   Mic as MicIcon,
   Videocam as VideocamIcon,
-} from '@mui/icons-material';
-import useChat from '../../hooks/useChat';
-import useCall from '../../hooks/useCall';
-import { useTranslation } from'react-i18next';
+} from "@mui/icons-material";
+import useChat from "../../hooks/useChat";
+import useCall from "../../hooks/useCall";
+import { useTranslation } from "react-i18next";
 
 // Componente per l'input di messaggi
 const MessageInput: React.FC = () => {
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
   const [fileInputKey, setFileInputKey] = useState(Date.now());
   const { sendMessage, sendFileMessage, currentRecipient } = useChat();
   const { startCall } = useCall();
@@ -27,15 +26,16 @@ const MessageInput: React.FC = () => {
 
   // Gestisce l'invio del messaggio
   const handleSendMessage = () => {
-    if (message.trim()) {
+    if (message.trim() && currentRecipient) {
+      // Verifica che ci sia un destinatario
       sendMessage(message);
-      setMessage('');
+      setMessage("");
     }
   };
 
   // Gestisce la pressione del tasto Invio
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
@@ -46,7 +46,7 @@ const MessageInput: React.FC = () => {
     if (!e.target.files || e.target.files.length === 0) return;
 
     const file = e.target.files[0];
-    
+
     if (file) {
       sendFileMessage(file)
         .then(() => {
@@ -54,8 +54,8 @@ const MessageInput: React.FC = () => {
           setFileInputKey(Date.now());
         })
         .catch((error) => {
-          console.error('Errore durante l\'invio del file:', error);
-          alert('Errore durante l\'invio del file. Riprova.');
+          console.error("Errore durante l'invio del file:", error);
+          alert("Errore durante l'invio del file. Riprova.");
         });
     }
   };
@@ -79,21 +79,21 @@ const MessageInput: React.FC = () => {
       sx={{
         p: 2,
         borderTop: 1,
-        borderColor: 'divider',
-        backgroundColor: 'background.paper',
+        borderColor: "divider",
+        backgroundColor: "background.paper",
       }}
     >
       <Box
         sx={{
-          display: 'flex',
-          alignItems: 'center',
+          display: "flex",
+          alignItems: "center",
           gap: 1,
         }}
       >
         {/* Input per i file */}
         <input
           accept="image/*,application/pdf,text/plain"
-          style={{ display: 'none' }}
+          style={{ display: "none" }}
           id="file-upload"
           key={fileInputKey}
           type="file"
@@ -101,8 +101,8 @@ const MessageInput: React.FC = () => {
         />
         <label htmlFor="file-upload">
           <Tooltip title="Allega file">
-            <IconButton 
-              color="primary" 
+            <IconButton
+              color="primary"
               component="span"
               aria-label="allega file"
             >
@@ -114,7 +114,7 @@ const MessageInput: React.FC = () => {
         {/* Input per il messaggio */}
         <TextField
           fullWidth
-          placeholder={t('messageInput.scrivi')}
+          placeholder={t("messageInput.scrivi")}
           variant="outlined"
           size="small"
           value={message}
@@ -143,7 +143,13 @@ const MessageInput: React.FC = () => {
         />
 
         {/* Pulsanti per le chiamate */}
-        <Tooltip title={isCallAvailable ? "Chiamata audio" : "Seleziona un utente per chiamare"}>
+        <Tooltip
+          title={
+            isCallAvailable
+              ? "Chiamata audio"
+              : "Seleziona un utente per chiamare"
+          }
+        >
           <span>
             <IconButton
               color="primary"
@@ -156,7 +162,13 @@ const MessageInput: React.FC = () => {
           </span>
         </Tooltip>
 
-        <Tooltip title={isCallAvailable ? "Videochiamata" : "Seleziona un utente per chiamare"}>
+        <Tooltip
+          title={
+            isCallAvailable
+              ? "Videochiamata"
+              : "Seleziona un utente per chiamare"
+          }
+        >
           <span>
             <IconButton
               color="primary"

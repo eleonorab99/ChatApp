@@ -33,7 +33,6 @@
       "scrivi": "Write a message...",
       "invia": "Send message",
       "utenti": "Online Users",
-      "nessunUtente": "No other users online",
-      "chatGlobale": "Global Chat"
+      "nessunUtente": "No other users online"
     }
   }

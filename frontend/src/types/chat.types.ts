@@ -18,6 +18,8 @@ export interface Message {
 export interface OnlineUser {
   userId: number;
   username: string;
+  isOnline: boolean;
+  lastSeen?: string;
 }
 
 // Tipi di messaggi WebSocket

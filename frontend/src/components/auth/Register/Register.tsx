@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   TextField,
@@ -10,21 +10,18 @@ import {
   InputAdornment,
   IconButton,
   Button,
-} from '@mui/material';
-import {
-  Visibility,
-  VisibilityOff,
-} from '@mui/icons-material';
-import useAuth from '../../../hooks/useAuth';
-import useApp from '../../../hooks/useApp';
-import './RegisterStyle.css';
+} from "@mui/material";
+import { Visibility, VisibilityOff } from "@mui/icons-material";
+import useAuth from "../../../hooks/useAuth";
+import useApp from "../../../hooks/useApp";
+import "./RegisterStyle.css";
 
 // Componente per la registrazione
 const Register: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,22 +32,22 @@ const Register: React.FC = () => {
   // Validazione dei campi del form
   const validateForm = (): boolean => {
     if (!email || !password || !username || !confirmPassword) {
-      setError('Tutti i campi sono obbligatori');
+      setError("Tutti i campi sono obbligatori");
       return false;
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Email non valida');
+      setError("Email non valida");
       return false;
     }
 
     if (password.length < 6) {
-      setError('La password deve contenere almeno 6 caratteri');
+      setError("La password deve contenere almeno 6 caratteri");
       return false;
     }
 
     if (password !== confirmPassword) {
-      setError('Le password non corrispondono');
+      setError("Le password non corrispondono");
       return false;
     }
 
@@ -68,19 +65,19 @@ const Register: React.FC = () => {
     try {
       setError(null);
       await register({ email, password, username });
-      
+
       addNotification({
-        type: 'success',
-        message: 'Registrazione completata con successo',
-        autoHideDuration: 3000
+        type: "success",
+        message: "Registrazione completata con successo",
+        autoHideDuration: 3000,
       });
-      
-      navigate('/');
+
+      navigate("/");
     } catch (err) {
-      let errorMessage = 'Errore durante la registrazione';
+      let errorMessage = "Errore durante la registrazione";
       if (err instanceof Error) {
         errorMessage = err.message;
-      } else if (typeof err === 'object' && err !== null) {
+      } else if (typeof err === "object" && err !== null) {
         // Gestione degli errori API specifici
         const apiError = err as any;
         if (apiError.response?.data?.message) {
@@ -93,7 +90,7 @@ const Register: React.FC = () => {
 
   // Gestisce la pressione del tasto Invio
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       handleSubmit(e);
     }
   };
@@ -110,35 +107,32 @@ const Register: React.FC = () => {
 
   // Naviga alla pagina di login
   const navigateToLogin = () => {
-    navigate('/login');
+    navigate("/login");
   };
 
   return (
     <Container component="main" maxWidth="xs" className="container">
-      <Box className= "boxWrapper">
-        <Paper elevation={3} className= "paper">
-          <Typography 
-            component="h1" 
-            variant="h4" 
-            className="title"
-          >
-            DROCSID
+      <Box className="boxWrapper">
+        <Paper elevation={3} className="paper">
+          <Typography component="h1" variant="h4" className="title">
+            Connectly
           </Typography>
-          <Typography 
-            component="h2" 
-            variant="h6" 
-            className="subtitle"
-          >
+          <Typography component="h2" variant="h6" className="subtitle">
             Registration
           </Typography>
-          
+
           {error && (
-            <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+            <Alert severity="error" sx={{ width: "100%", mb: 2 }}>
               {error}
             </Alert>
           )}
-          
-          <Box component="form" onSubmit={handleSubmit} noValidate className="form">
+
+          <Box
+            component="form"
+            onSubmit={handleSubmit}
+            noValidate
+            className="form"
+          >
             <TextField
               margin="normal"
               required
@@ -172,7 +166,7 @@ const Register: React.FC = () => {
               fullWidth
               name="password"
               label="Password"
-              type={showPassword ? 'text' : 'password'}
+              type={showPassword ? "text" : "password"}
               id="password"
               autoComplete="new-password"
               value={password}
@@ -190,7 +184,7 @@ const Register: React.FC = () => {
                       {showPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
                   </InputAdornment>
-                )
+                ),
               }}
             />
             <TextField
@@ -199,7 +193,7 @@ const Register: React.FC = () => {
               fullWidth
               name="confirmPassword"
               label="Conferma password"
-              type={showConfirmPassword ? 'text' : 'password'}
+              type={showConfirmPassword ? "text" : "password"}
               id="confirmPassword"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -216,7 +210,7 @@ const Register: React.FC = () => {
                       {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
                   </InputAdornment>
-                )
+                ),
               }}
             />
             <Button

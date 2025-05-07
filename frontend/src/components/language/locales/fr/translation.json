@@ -33,7 +33,6 @@
     "scrivi": "Écrivez un message...",
     "invia": "Envoyer le message",
     "utenti": "Utilisateurs en ligne",
-    "nessunUtente": "Aucun autre utilisateur en ligne",
-    "chatGlobale": "Chat global"
+    "nessunUtente": "Aucun autre utilisateur en ligne"
   }
 }

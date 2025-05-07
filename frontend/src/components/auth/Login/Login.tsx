@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   TextField,
@@ -10,22 +10,22 @@ import {
   InputAdornment,
   IconButton,
   Button,
-} from '@mui/material';
+} from "@mui/material";
 import {
   LockOutlined as LockOutlinedIcon,
   Visibility,
   VisibilityOff,
-  Login as LoginIcon
-} from '@mui/icons-material';
-import useAuth from '../../../hooks/useAuth';
-import useApp from '../../../hooks/useApp';
-import LoadingButton from '../../common/LoadingButton';
-import './LoginStyle.css';
+  Login as LoginIcon,
+} from "@mui/icons-material";
+import useAuth from "../../../hooks/useAuth";
+import useApp from "../../../hooks/useApp";
+import LoadingButton from "../../common/LoadingButton";
+import "./LoginStyle.css";
 
 // Componente per il login
 const Login: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { login, loading } = useAuth();
@@ -35,25 +35,25 @@ const Login: React.FC = () => {
   // Gestisce il submit del form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email || !password) {
-      setError('Inserisci email e password');
+      setError("Inserisci email e password");
       return;
     }
-    
+
     try {
       setError(null);
       await login({ email, password });
-      
+
       addNotification({
-        type: 'success',
-        message: 'Login effettuato con successo',
-        autoHideDuration: 3000
+        type: "success",
+        message: "Login effettuato con successo",
+        autoHideDuration: 3000,
       });
-      
-      navigate('/');
+
+      navigate("/");
     } catch (err) {
-      let errorMessage = 'Errore durante il login';
+      let errorMessage = "Errore durante il login";
       if (err instanceof Error) {
         errorMessage = err.message;
       }
@@ -63,7 +63,7 @@ const Login: React.FC = () => {
 
   // Gestisce la pressione del tasto Invio
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       handleSubmit(e);
     }
   };
@@ -75,28 +75,30 @@ const Login: React.FC = () => {
 
   // Naviga alla pagina di registrazione
   const navigateToRegister = () => {
-    navigate('/register');
+    navigate("/register");
   };
 
   return (
-    <Container component="main" maxWidth="xs" className='container'>
-      <Box className= "boxWrapper">
-        <Paper
-          elevation={3} className='paper'>
-          <Box className='title'>
-            Chat App
-          </Box>
+    <Container component="main" maxWidth="xs" className="container">
+      <Box className="boxWrapper">
+        <Paper elevation={3} className="paper">
+          <Box className="title">Connectly</Box>
           <Typography component="h1" variant="h4" sx={{ mb: 3 }}>
             Accedi
           </Typography>
-          
+
           {error && (
-            <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+            <Alert severity="error" sx={{ width: "100%", mb: 2 }}>
               {error}
             </Alert>
           )}
-          
-          <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
+
+          <Box
+            component="form"
+            onSubmit={handleSubmit}
+            noValidate
+            sx={{ mt: 1, width: "100%" }}
+          >
             <TextField
               margin="normal"
               required
@@ -109,7 +111,7 @@ const Login: React.FC = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyPress={handleKeyPress}
-              className='textField'
+              className="textField"
               error={!!error && !email}
             />
             <TextField
@@ -118,14 +120,14 @@ const Login: React.FC = () => {
               fullWidth
               name="password"
               label="Password"
-              type={showPassword ? 'text' : 'password'}
+              type={showPassword ? "text" : "password"}
               id="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyPress={handleKeyPress}
               error={!!error && !password}
-              className='textField'
+              className="textField"
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -137,7 +139,7 @@ const Login: React.FC = () => {
                       {showPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
                   </InputAdornment>
-                )
+                ),
               }}
             />
             <LoadingButton
@@ -147,16 +149,12 @@ const Login: React.FC = () => {
               loading={loading}
               loadingPosition="start"
               startIcon={<LoginIcon />}
-              className='submitButton'
+              className="submitButton"
             >
               Accedi
             </LoadingButton>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button
-                onClick={navigateToRegister}
-                color="primary"
-                
-              >
+            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <Button onClick={navigateToRegister} color="primary">
                 Non hai un account? Registrati
               </Button>
             </Box>

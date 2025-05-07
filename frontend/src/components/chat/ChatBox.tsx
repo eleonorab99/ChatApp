@@ -8,12 +8,14 @@ import useChat from '../../hooks/useChat';
 
 // Componente principale della chat che unisce tutti i sottocomponenti
 const ChatBox: React.FC = () => {
-  const { fetchMessages } = useChat();
+  const { fetchMessages, currentRecipient } = useChat();
 
-  // Carica i messaggi all'avvio del componente
+  // Carica i messaggi quando cambia il destinatario
   useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
+    if (currentRecipient) {
+      fetchMessages();
+    }
+  }, [currentRecipient, fetchMessages]);
 
   return (
     <Box sx={{ display: 'flex', width: '100%', height: '100%', position: 'relative' }}>

@@ -7,14 +7,12 @@ import {
   Tooltip,
   InputAdornment,
   CircularProgress,
-  Typography,
 } from '@mui/material';
 import {
   Send as SendIcon,
   AttachFile as AttachFileIcon,
   Mic as MicIcon,
   Videocam as VideocamIcon,
-  Close as CloseIcon,
 } from '@mui/icons-material';
 import useChat from '../../hooks/useChat';
 import useCall from '../../hooks/useCall';
@@ -40,7 +38,7 @@ const MessageInput: React.FC = () => {
       return;
     }
 
-    if (message.trim()) {
+    if (message.trim() && currentRecipient) {
       sendMessage(message);
       setMessage('');
     }
@@ -79,7 +77,7 @@ const MessageInput: React.FC = () => {
 
   // Gestisce l'invio del file
   const handleSendFile = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile || !currentRecipient) return;
     
     setLoading(true);
     try {
@@ -116,6 +114,9 @@ const MessageInput: React.FC = () => {
 
   // Determina se i controlli per le chiamate devono essere attivi
   const isCallAvailable = !!currentRecipient;
+  
+  // Determina se l'input deve essere disabilitato
+  const isInputDisabled = !currentRecipient;
 
   return (
     <Paper
@@ -155,7 +156,7 @@ const MessageInput: React.FC = () => {
           key={fileInputKey}
           type="file"
           onChange={handleFileUpload}
-          disabled={loading}
+          disabled={loading || isInputDisabled}
         />
         <label htmlFor="file-upload">
           <Tooltip title={loading ? t('messageInput.caricamento') : t('messageInput.allega')}>
@@ -164,7 +165,7 @@ const MessageInput: React.FC = () => {
                 color="primary" 
                 component="span"
                 aria-label="allega file"
-                disabled={loading || !!selectedFile}
+                disabled={loading || !!selectedFile || isInputDisabled}
               >
                 {loading ? <CircularProgress size={24} /> : <AttachFileIcon />}
               </IconButton>
@@ -175,13 +176,15 @@ const MessageInput: React.FC = () => {
         {/* Input per il messaggio */}
         <TextField
           fullWidth
-          placeholder={selectedFile ? 'Aggiungi un commento (opzionale)' : t('messageInput.scrivi')}
+          placeholder={isInputDisabled 
+            ? "Seleziona un utente per iniziare a chattare" 
+            : (selectedFile ? 'Aggiungi un commento (opzionale)' : t('messageInput.scrivi'))}
           variant="outlined"
           size="small"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyPress={handleKeyPress}
-          disabled={loading}
+          disabled={loading || isInputDisabled}
           InputProps={{
             sx: { borderRadius: 6 },
             endAdornment: (
@@ -191,7 +194,7 @@ const MessageInput: React.FC = () => {
                     <IconButton
                       color="primary"
                       onClick={handleSendMessage}
-                      disabled={((!message.trim() && !selectedFile) || loading)}
+                      disabled={((!message.trim() && !selectedFile) || loading || isInputDisabled)}
                       edge="end"
                       aria-label="invia messaggio"
                     >

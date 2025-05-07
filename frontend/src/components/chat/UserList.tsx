@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Box,
   List,
@@ -9,34 +9,47 @@ import {
   Avatar,
   Typography,
   Badge,
-  Divider,
+  CircularProgress,
 } from '@mui/material';
-import { AccountCircle, Forum } from '@mui/icons-material';
+import { AccountCircle } from '@mui/icons-material';
 import useChat from '../../hooks/useChat';
 import useAuth from '../../hooks/useAuth';
-import { OnlineUser } from '../../types/chat.types';
+import { Contact } from '../../types/user.types';
 import { useTranslation } from 'react-i18next';
+import { formatDistanceToNow } from 'date-fns';
+import { it } from 'date-fns/locale';
 
-// Componente per la lista degli utenti online
+// Componente per la lista degli utenti/contatti
 const UserList: React.FC = () => {
-  const { onlineUsers, currentRecipient, setCurrentRecipient, unreadCounts } = useChat();
+  const { allContacts, currentRecipient, setCurrentRecipient, unreadCounts, fetchAllContacts, loading } = useChat();
   const { user } = useAuth();
   const { t } = useTranslation();
 
+  // Carica tutti i contatti all'avvio
+  useEffect(() => {
+    fetchAllContacts();
+  }, [fetchAllContacts]);
+
   // Seleziona un utente come destinatario
-  const handleSelectUser = (selectedUser: OnlineUser) => {
+  const handleSelectUser = (selectedUser: Contact) => {
+    console.log("Utente selezionato:", selectedUser); // Debug
     setCurrentRecipient(selectedUser);
   };
 
-  // Seleziona la chat globale (nessun destinatario specifico)
-  const handleSelectGlobalChat = () => {
-    setCurrentRecipient(null);
-  };
-
   // Filtra l'utente corrente dalla lista
-  const filteredUsers = onlineUsers.filter(
-    (onlineUser) => user && onlineUser.userId !== user.id
+  const filteredContacts = allContacts.filter(
+    (contact) => user && contact.userId !== user.id
   );
+
+  // Funzione per formattare l'ultima connessione
+  const formatLastSeen = (lastSeen?: string): string => {
+    if (!lastSeen) return '';
+    try {
+      return formatDistanceToNow(new Date(lastSeen), { addSuffix: true, locale: it });
+    } catch (error) {
+      return '';
+    }
+  };
 
   return (
     <Box
@@ -62,81 +75,105 @@ const UserList: React.FC = () => {
         {t('messageInput.utenti')}
       </Typography>
 
-      <List
-        sx={{
-          width: '100%',
-          overflowY: 'auto',
-          flex: 1,
-        }}
-      >
-        {/* Opzione per la Chat Globale */}
-        <ListItem disablePadding>
-          <ListItemButton
-            selected={currentRecipient === null}
-            onClick={handleSelectGlobalChat}
-            sx={{
-              borderRadius: 0,
-              '&.Mui-selected': {
-                backgroundColor: 'action.selected',
-              },
-            }}
-          >
-            <ListItemAvatar>
-              <Avatar sx={{ backgroundColor: 'secondary.main' }}>
-                <Forum />
-              </Avatar>
-            </ListItemAvatar>
-            <ListItemText primary="Chat Globale" />
-          </ListItemButton>
-        </ListItem>
-
-        <Divider component="li" />
-
-        {filteredUsers.length === 0 ? (
-          <Box sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="body2" color="text.secondary">
-              {t('messageInput.nessunUtente')}
-            </Typography>
-          </Box>
-        ) : (
-          filteredUsers.map((onlineUser) => (
-            <ListItem key={onlineUser.userId} disablePadding>
-              <ListItemButton
-                selected={currentRecipient?.userId === onlineUser.userId}
-                onClick={() => handleSelectUser(onlineUser)}
-                sx={{
-                  borderRadius: 0,
-                  '&.Mui-selected': {
-                    backgroundColor: 'action.selected',
-                  },
-                }}
-              >
-                <ListItemAvatar>
-                  <Avatar>
-                    <AccountCircle />
-                  </Avatar>
-                </ListItemAvatar>
-                <ListItemText 
-                  primary={
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <Typography component="span" sx={{ flexGrow: 1 }}>
-                        {onlineUser.username}
-                      </Typography>
-                      {unreadCounts[onlineUser.userId] > 0 && (
-                        <Badge 
-                          badgeContent={unreadCounts[onlineUser.userId]} 
-                          color="error"
-                          sx={{ ml: 1 }}
-                        />
-                      )}
-                    </Box>
-                  }
-                />
-              </ListItemButton>
-            </ListItem>
-          ))
-        )}
-      </List>
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <List
+          sx={{
+            width: '100%',
+            overflowY: 'auto',
+            flex: 1,
+          }}
+        >
+          {filteredContacts.length === 0 ? (
+            <Box sx={{ p: 2, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                {t('messageInput.nessunUtente')}
+              </Typography>
+            </Box>
+          ) : (
+            filteredContacts.map((contact) => {
+              const isSelected = currentRecipient?.userId === contact.userId;
+              const hasUnread = unreadCounts[contact.userId] > 0;
+              
+              return (
+                <ListItem key={contact.userId} disablePadding>
+                  <ListItemButton
+                    selected={isSelected}
+                    onClick={() => handleSelectUser(contact)}
+                    sx={{
+                      borderRadius: 0,
+                      '&.Mui-selected': {
+                        backgroundColor: 'action.selected',
+                      },
+                    }}
+                  >
+                    <ListItemAvatar>
+                      <Badge
+                        overlap="circular"
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                        badgeContent={
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: '50%',
+                              bgcolor: contact.isOnline ? 'success.main' : 'error.main',
+                              border: '2px solid white',
+                            }}
+                          />
+                        }
+                      >
+                        <Avatar>
+                          <AccountCircle />
+                        </Avatar>
+                      </Badge>
+                    </ListItemAvatar>
+                    <ListItemText 
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Typography 
+                            component="span" 
+                            sx={{ 
+                              flexGrow: 1,
+                              fontWeight: hasUnread ? 'bold' : 'normal'
+                            }}
+                          >
+                            {contact.username}
+                          </Typography>
+                          {hasUnread && (
+                            <Badge 
+                              badgeContent={contact.unreadCount || unreadCounts[contact.userId] || 0} 
+                              color="error"
+                              sx={{ ml: 1 }}
+                            />
+                          )}
+                        </Box>
+                      }
+                      secondary={
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            color: 'text.secondary',
+                            fontStyle: !contact.isOnline ? 'italic' : 'normal',
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          {contact.isOnline 
+                            ? 'Online' 
+                            : (contact.lastSeen ? formatLastSeen(contact.lastSeen) : 'Offline')}
+                        </Typography>
+                      }
+                    />
+                  </ListItemButton>
+                </ListItem>
+              );
+            })
+          )}
+        </List>
+      )}
     </Box>
   );
 };

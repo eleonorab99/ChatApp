@@ -1,10 +1,12 @@
 import React, { useRef, useEffect } from 'react';
-import { Box, Typography, Paper, Divider, Link, CircularProgress } from '@mui/material';
+import { Box, Typography, Paper, Divider, CircularProgress } from '@mui/material';
 import useChat from '../../hooks/useChat';
 import useAuth from '../../hooks/useAuth';
 import { Message } from '../../types/chat.types';
 import { formatTime } from '../../utils/formatters';
 import FilePreview from './FilePreview';
+import { format } from 'date-fns';
+import { it } from 'date-fns/locale';
 
 // Componente per visualizzare la lista dei messaggi
 const MessageList: React.FC = () => {
@@ -20,12 +22,17 @@ const MessageList: React.FC = () => {
   // Effettua lo scroll quando arrivano nuovi messaggi
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, currentRecipient]);
 
-  // Determina il tipo di chat (globale o privata)
-  const chatTitle = currentRecipient 
-    ? `Chat con ${currentRecipient.username}` 
-    : 'Chat Globale';
+  // Determina il titolo della chat basato su chi è il destinatario
+  const chatTitle = currentRecipient
+    ? `Chat con ${currentRecipient.username}`
+    : 'Seleziona un utente per iniziare a chattare';
+
+  // Ottieni i messaggi per il destinatario corrente
+  const currentMessages = currentRecipient 
+    ? (messages[currentRecipient.userId] || [])
+    : [];
 
   // Componente per un singolo messaggio
   const MessageItem: React.FC<{ message: Message }> = ({ message }) => {
@@ -65,7 +72,9 @@ const MessageList: React.FC = () => {
             <Box sx={{ mt: message.content ? 1 : 0 }}>
               <FilePreview 
                 fileUrl={message.fileUrl}
-                
+                fileName={message.fileName || undefined}
+                fileType={message.fileType || undefined}
+                fileSize={message.fileSize || undefined}
                 isPreviewOnly={true}
               />
             </Box>
@@ -117,16 +126,11 @@ const MessageList: React.FC = () => {
 
   // Formatta la data in formato esteso
   const formatDate = (date: Date): string => {
-    return date.toLocaleDateString('it-IT', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    return format(date, 'EEEE d MMMM yyyy', { locale: it });
   };
 
   // Raggruppa i messaggi per data
-  const messagesByDate = messages.reduce<{ [date: string]: Message[] }>((acc, message) => {
+  const messagesByDate = currentMessages.reduce<{ [date: string]: Message[] }>((acc, message) => {
     const date = new Date(message.createdAt).toDateString();
     
     if (!acc[date]) {
@@ -156,6 +160,32 @@ const MessageList: React.FC = () => {
         }}
       >
         <Typography variant="h6">{chatTitle}</Typography>
+        {currentRecipient && (
+          <Typography 
+            variant="body2" 
+            color="text.secondary"
+            sx={{ 
+              display: 'flex',
+              alignItems: 'center',
+              mt: 0.5
+            }}
+          >
+            <Box
+              sx={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                bgcolor: currentRecipient.isOnline ? 'success.main' : 'error.main',
+                mr: 1
+              }}
+            />
+            {currentRecipient.isOnline 
+              ? 'Online' 
+              : currentRecipient.lastSeen 
+                ? `Ultimo accesso ${format(new Date(currentRecipient.lastSeen), 'dd/MM/yyyy HH:mm', { locale: it })}`
+                : 'Offline'}
+          </Typography>
+        )}
       </Box>
 
       <Box
@@ -165,11 +195,26 @@ const MessageList: React.FC = () => {
           flexGrow: 1,
         }}
       >
-        {loading ? (
+        {!currentRecipient ? (
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              height: '100%',
+              opacity: 0.6
+            }}
+          >
+            <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center' }}>
+              Seleziona un utente dalla lista per iniziare una conversazione
+            </Typography>
+          </Box>
+        ) : loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress />
           </Box>
-        ) : messages.length === 0 ? (
+        ) : currentMessages.length === 0 ? (
           <Box sx={{ textAlign: 'center', p: 4 }}>
             <Typography variant="body1" color="text.secondary">
               Nessun messaggio ancora. Inizia la conversazione!

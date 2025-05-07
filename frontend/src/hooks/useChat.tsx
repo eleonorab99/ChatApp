@@ -2,7 +2,7 @@ import { useContext } from 'react';
 import { ChatContext } from '../contexts/ChatContext';
 
 // Hook personalizzato per utilizzare il contesto della chat
-export const useChat = () => {
+const useChat = () => {
   const context = useContext(ChatContext);
   
   if (context === undefined) {

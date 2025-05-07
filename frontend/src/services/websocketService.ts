@@ -11,6 +11,8 @@ class WebSocketService {
   private reconnectTimeout: number = 3000; // 3 secondi
   private reconnectIntervalId: number | null = null;
   private token: string | null = null;
+  private connectionStatus: 'connected' | 'disconnected' | 'reconnecting' = 'disconnected';
+  private heartbeatInterval: number | null = null;
 
   // Inizializza la connessione WebSocket
   connect(token: string): void {
@@ -27,6 +29,7 @@ class WebSocketService {
       const wsUrl = `${this.url}?token=${encodeURIComponent(token)}`;
       console.log('Connessione WebSocket a:', wsUrl);
       
+      this.updateConnectionStatus('reconnecting');
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = this.onOpen.bind(this);
@@ -35,6 +38,7 @@ class WebSocketService {
       this.ws.onerror = this.onError.bind(this);
     } catch (error) {
       console.error('Errore durante la connessione WebSocket:', error);
+      this.updateConnectionStatus('disconnected');
       this.scheduleReconnect();
     }
   }
@@ -43,7 +47,7 @@ class WebSocketService {
   private onOpen(): void {
     console.log('Connessione WebSocket stabilita');
     this.reconnectAttempts = 0;
-    this.notifyConnectionStatusChange('connected');
+    this.updateConnectionStatus('connected');
     
     if (this.reconnectIntervalId) {
       clearInterval(this.reconnectIntervalId);
@@ -52,13 +56,16 @@ class WebSocketService {
     
     // Invia i messaggi in buffer
     this.sendBufferedMessages();
+    
+    // Avvia l'heartbeat per mantenere la connessione attiva
+    this.startHeartbeat();
   }
 
   // Gestisce i messaggi in arrivo
   private onMessage(event: MessageEvent): void {
     try {
       const message = JSON.parse(event.data) as WebSocketMessage;
-      console.log('Messaggio WebSocket ricevuto:', message.type);
+      // console.log('Messaggio WebSocket ricevuto:', message.type);
       
       // Notifica tutti i listener registrati
       this.messageListeners.forEach(listener => listener(message));
@@ -70,7 +77,8 @@ class WebSocketService {
   // Gestisce la chiusura della connessione
   private onClose(event: CloseEvent): void {
     console.log(`Connessione WebSocket chiusa: ${event.code} ${event.reason}`);
-    this.notifyConnectionStatusChange('disconnected');
+    this.updateConnectionStatus('disconnected');
+    this.stopHeartbeat();
     
     if (event.code !== 1000) {
       // 1000 è il codice per chiusura normale
@@ -81,13 +89,41 @@ class WebSocketService {
   // Gestisce gli errori della connessione
   private onError(error: Event): void {
     console.error('Errore WebSocket:', error);
-    this.notifyConnectionStatusChange('disconnected');
+    this.updateConnectionStatus('disconnected');
     // Non chiamiamo scheduleReconnect qui perché onClose verrà chiamato dopo onError
+  }
+
+  // Aggiorna lo stato della connessione e notifica i listener
+  private updateConnectionStatus(status: 'connected' | 'disconnected' | 'reconnecting'): void {
+    if (this.connectionStatus !== status) {
+      this.connectionStatus = status;
+      this.notifyConnectionStatusChange(status);
+    }
   }
 
   // Notifica i listener del cambio di stato della connessione
   private notifyConnectionStatusChange(status: 'connected' | 'disconnected' | 'reconnecting'): void {
     this.connectionStatusListeners.forEach(listener => listener(status));
+  }
+
+  // Avvia l'heartbeat per mantenere la connessione attiva
+  private startHeartbeat(): void {
+    this.stopHeartbeat(); // Ferma eventuali heartbeat esistenti
+    
+    this.heartbeatInterval = window.setInterval(() => {
+      // Invia un messaggio di ping per mantenere la connessione attiva
+      this.send({
+        type: 'ping' as WebSocketMessageType,
+      });
+    }, 30000); // 30 secondi
+  }
+
+  // Ferma l'heartbeat
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval !== null) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
   }
 
   // Pianifica un tentativo di riconnessione
@@ -101,7 +137,7 @@ class WebSocketService {
     const timeout = this.reconnectTimeout * Math.min(this.reconnectAttempts, 5); // Backoff esponenziale limitato
     console.log(`Tentativo di riconnessione ${this.reconnectAttempts}/${this.maxReconnectAttempts} tra ${timeout}ms`);
     
-    this.notifyConnectionStatusChange('reconnecting');
+    this.updateConnectionStatus('reconnecting');
     
     if (this.reconnectIntervalId) {
       clearTimeout(this.reconnectIntervalId);
@@ -153,7 +189,8 @@ class WebSocketService {
   // Salva il messaggio nel buffer per inviarlo quando la connessione sarà ristabilita
   private bufferMessage(message: WebSocketMessage): void {
     // Salviamo solo messaggi di chat e non segnali di chiamata che potrebbero non essere più validi
-    if (message.type === WebSocketMessageType.CHAT_MESSAGE) {
+    if (message.type === WebSocketMessageType.CHAT_MESSAGE ||
+        message.type === WebSocketMessageType.READ_RECEIPT) {
       this.messageBuffer.push(message);
       console.log('Messaggio salvato nel buffer per invio successivo');
       this.scheduleReconnect();
@@ -199,6 +236,15 @@ class WebSocketService {
     });
   }
 
+  // Invia una ricevuta di lettura
+  sendReadReceipt(senderId: number, messageIds: number[]): void {
+    this.send({
+      type: WebSocketMessageType.READ_RECEIPT,
+      recipientId: senderId,
+      messageIds
+    });
+  }
+
   // Chiude la connessione WebSocket
   disconnect(): void {
     if (this.ws) {
@@ -211,8 +257,10 @@ class WebSocketService {
       this.reconnectIntervalId = null;
     }
     
+    this.stopHeartbeat();
+    
     this.token = null;
-    this.notifyConnectionStatusChange('disconnected');
+    this.updateConnectionStatus('disconnected');
   }
 
   // Verifica se la connessione è attiva
@@ -232,13 +280,18 @@ class WebSocketService {
   onConnectionStatusChange(listener: (status: 'connected' | 'disconnected' | 'reconnecting') => void): void {
     this.connectionStatusListeners.push(listener);
     // Invia subito lo stato attuale
-    listener(this.isConnected() ? 'connected' : 'disconnected');
+    listener(this.connectionStatus);
   }
 
   // Rimuove un listener per lo stato della connessione
   offConnectionStatusChange(listener: (status: 'connected' | 'disconnected' | 'reconnecting') => void): void {
     this.connectionStatusListeners = this.connectionStatusListeners.filter(l => l !== listener);
   }
+}
+
+// Aggiungi PING al WebSocketMessageType
+if (!Object.values(WebSocketMessageType).includes('PING' as any)) {
+  (WebSocketMessageType as any).PING = 'ping';
 }
 
 // Esporta un'istanza del servizio WebSocket

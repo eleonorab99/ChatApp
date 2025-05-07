@@ -1,12 +1,20 @@
 import React, { useRef, useEffect } from 'react';
-import { Box, Paper, Typography, Backdrop } from '@mui/material';
+import { Box, Paper, Typography, Backdrop, CircularProgress } from '@mui/material';
 import CallControls from './CallControls';
 import useCall from '../../hooks/useCall';
 import useChat from '../../hooks/useChat';
 
 // Componente per gestire la visualizzazione di una chiamata video
 const VideoCall: React.FC = () => {
-  const { isCallActive, isVideoCall, localStream, remoteStream, isVideoEnabled } = useCall();
+  const { 
+    isCallActive, 
+    isVideoCall, 
+    localStream, 
+    remoteStream, 
+    isVideoEnabled, 
+    isAudioEnabled,
+    error
+  } = useCall();
   const { currentRecipient } = useChat();
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -32,6 +40,12 @@ const VideoCall: React.FC = () => {
 
   // Nome del partner di chiamata
   const partnerName = currentRecipient?.username || 'Utente';
+
+  // Stato di caricamento - quando abbiamo una chiamata attiva ma nessuno stream remoto
+  const isLoading = isCallActive && !remoteStream;
+
+  // Messaggio di errore se presente
+  const hasError = !!error;
 
   return (
     <Backdrop
@@ -71,7 +85,27 @@ const VideoCall: React.FC = () => {
             borderRadius: 2,
           }}
         >
-          {isVideoCall ? (
+          {isLoading && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <CircularProgress color="primary" size={60} sx={{ mb: 2 }} />
+              <Typography variant="body1" color="white">
+                Connessione in corso...
+              </Typography>
+            </Box>
+          )}
+
+          {hasError && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 3 }}>
+              <Typography variant="h6" color="error" gutterBottom>
+                Errore nella chiamata
+              </Typography>
+              <Typography variant="body1" color="white">
+                {error}
+              </Typography>
+            </Box>
+          )}
+
+          {isVideoCall && remoteStream ? (
             <video
               ref={remoteVideoRef}
               autoPlay
@@ -114,13 +148,18 @@ const VideoCall: React.FC = () => {
                 {partnerName}
               </Typography>
               <Typography variant="body1" color="white" sx={{ mt: 1, opacity: 0.7 }}>
-                Chiamata in corso...
+                {remoteStream ? 'Chiamata in corso...' : 'Connessione in corso...'}
               </Typography>
+              {!isAudioEnabled && (
+                <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+                  Microfono disattivato
+                </Typography>
+              )}
             </Box>
           )}
 
           {/* Nome dell'utente remoto (per video chiamate) */}
-          {isVideoCall && (
+          {isVideoCall && remoteStream && (
             <Box
               sx={{
                 position: 'absolute',

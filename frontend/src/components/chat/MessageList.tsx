@@ -198,8 +198,11 @@ const MessageList: React.FC = () => {
           Object.entries(messagesByDate).map(([date, dateMessages]) => (
             <React.Fragment key={date}>
               <DateDivider date={new Date(date)} />
-              {dateMessages.map((message) => (
-                <MessageItem key={message.id} message={message} />
+              {dateMessages.map((message, index) => (
+                <MessageItem 
+                  key={`${message.id}-${message.createdAt}-${index}`} 
+                  message={message} 
+                />
               ))}
             </React.Fragment>
           ))

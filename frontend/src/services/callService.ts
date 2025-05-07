@@ -16,12 +16,18 @@ class CallService {
   private onCallStartedCallback: (() => void) | null = null;
   private onIceConnectionStateChangeCallback: ((state: RTCIceConnectionState) => void) | null = null;
 
-  // Configurazione WebRTC
+  // Configurazione WebRTC migliorata con più server STUN/TURN
   private config: RTCConfiguration = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ]
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' }
+      // In un'app di produzione, dovresti considerare l'aggiunta di server TURN
+      // { urls: 'turn:turn.example.com', username: 'username', credential: 'credential' }
+    ],
+    iceCandidatePoolSize: 10
   };
 
   // Inizia una chiamata
@@ -35,11 +41,26 @@ class CallService {
       this.currentRecipientId = recipientId;
       this.isVideoCall = withVideo;
 
-      // Richiedi i permessi media
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: withVideo
-      });
+      // Richiedi i permessi media con gestione errori migliorata
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: withVideo
+        });
+      } catch (error) {
+        console.error('Errore nell\'accesso ai dispositivi media:', error);
+        // Se l'accesso video fallisce ma stiamo tentando una videochiamata, proviamo solo con l'audio
+        if (withVideo) {
+          console.log('Tentativo fallback: solo audio');
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false
+          });
+          this.isVideoCall = false; // Downgrade a chiamata audio
+        } else {
+          throw error; // Se anche l'audio fallisce, propaga l'errore
+        }
+      }
 
       this.createPeerConnection();
 
@@ -51,21 +72,37 @@ class CallService {
           }
         });
 
-        // Crea un'offerta
-        const offer = await this.peerConnection.createOffer();
-        await this.peerConnection.setLocalDescription(offer);
+        // Crea un'offerta con timeout
+        try {
+          // Imposta un timeout per la creazione dell'offerta
+          const offerPromise = this.peerConnection.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: this.isVideoCall
+          });
+          
+          const timeoutPromise = new Promise<RTCSessionDescriptionInit>((_, reject) => {
+            setTimeout(() => reject(new Error('Timeout nella creazione dell\'offerta')), 10000);
+          });
+          
+          const offer = await Promise.race([offerPromise, timeoutPromise]);
+          await this.peerConnection.setLocalDescription(offer);
 
-        // Invia l'offerta
-        websocketService.send({
-          type: WebSocketMessageType.CALL_OFFER,
-          recipientId: recipientId,
-          offer: offer,
-          isVideo: withVideo
-        });
+          // Invia l'offerta
+          websocketService.send({
+            type: WebSocketMessageType.CALL_OFFER,
+            recipientId: recipientId,
+            offer: offer,
+            isVideo: this.isVideoCall
+          });
 
-        // Notifica che la chiamata è iniziata
-        if (this.onCallStartedCallback) {
-          this.onCallStartedCallback();
+          // Notifica che la chiamata è iniziata
+          if (this.onCallStartedCallback) {
+            this.onCallStartedCallback();
+          }
+        } catch (error) {
+          console.error('Errore nella creazione dell\'offerta:', error);
+          this.cleanupCall();
+          throw new Error('Impossibile stabilire la chiamata. Riprova più tardi.');
         }
       }
     } catch (error) {
@@ -81,11 +118,26 @@ class CallService {
       this.currentRecipientId = callerId;
       this.isVideoCall = isVideo;
 
-      // Richiedi i permessi media
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: isVideo
-      });
+      // Richiedi i permessi media con gestione errori migliorata
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: isVideo
+        });
+      } catch (error) {
+        console.error('Errore nell\'accesso ai dispositivi media durante la risposta:', error);
+        // Se l'accesso video fallisce ma stiamo tentando una videochiamata, proviamo solo con l'audio
+        if (isVideo) {
+          console.log('Risposta: fallback a solo audio');
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false
+          });
+          this.isVideoCall = false; // Downgrade a chiamata audio
+        } else {
+          throw error;
+        }
+      }
 
       this.createPeerConnection();
 
@@ -98,22 +150,29 @@ class CallService {
         });
 
         // Imposta la descrizione remota
-        await this.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-        
-        // Crea una risposta
-        const answer = await this.peerConnection.createAnswer();
-        await this.peerConnection.setLocalDescription(answer);
+        try {
+          await this.peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+          
+          // Crea una risposta
+          const answer = await this.peerConnection.createAnswer();
+          await this.peerConnection.setLocalDescription(answer);
 
-        // Invia la risposta
-        websocketService.send({
-          type: WebSocketMessageType.CALL_ANSWER,
-          recipientId: callerId,
-          answer: answer
-        });
+          // Invia la risposta
+          websocketService.send({
+            type: WebSocketMessageType.CALL_ANSWER,
+            recipientId: callerId,
+            answer: answer,
+            isVideo: this.isVideoCall // Informiamo anche se abbiamo fatto downgrade a chiamata audio
+          });
 
-        // Notifica che la chiamata è iniziata
-        if (this.onCallStartedCallback) {
-          this.onCallStartedCallback();
+          // Notifica che la chiamata è iniziata
+          if (this.onCallStartedCallback) {
+            this.onCallStartedCallback();
+          }
+        } catch (error) {
+          console.error('Errore durante la risposta alla chiamata:', error);
+          this.cleanupCall();
+          throw new Error('Impossibile rispondere alla chiamata. Riprova più tardi.');
         }
       }
     } catch (error) {
@@ -194,6 +253,12 @@ class CallService {
       if (this.peerConnection && message.answer) {
         await this.peerConnection.setRemoteDescription(new RTCSessionDescription(message.answer));
         console.log('Risposta remota impostata con successo');
+        
+        // Se il destinatario ha fatto downgrade a chiamata audio, aggiorniamo il nostro stato
+        if (this.isVideoCall && message.isVideo === false) {
+          console.log('Il destinatario ha risposto con una chiamata audio (downgrade)');
+          this.isVideoCall = false;
+        }
       }
     } catch (error) {
       console.error('Errore nella gestione della risposta:', error);
@@ -210,6 +275,7 @@ class CallService {
       }
     } catch (error) {
       console.error('Errore nell\'aggiunta del candidato ICE:', error);
+      // Non terminiamo la chiamata per un singolo candidato fallito
     }
   }
 
@@ -230,6 +296,7 @@ class CallService {
     try {
       this.peerConnection = new RTCPeerConnection(this.config);
       
+      // Handler per i candidati ICE
       this.peerConnection.onicecandidate = (event) => {
         if (event.candidate && this.currentRecipientId) {
           websocketService.send({
@@ -240,6 +307,7 @@ class CallService {
         }
       };
 
+      // Handler per le tracce in ingresso
       this.peerConnection.ontrack = (event) => {
         console.log('Ricevuta traccia remota:', event.track.kind);
         
@@ -251,13 +319,16 @@ class CallService {
           }
         }
         
+        // Aggiungiamo tutte le tracce
         event.streams[0].getTracks().forEach(track => {
           if (this.remoteStream) {
+            console.log(`Aggiunta traccia ${track.kind} allo stream remoto`);
             this.remoteStream.addTrack(track);
           }
         });
       };
 
+      // Handler per i cambiamenti di stato della connessione ICE
       this.peerConnection.oniceconnectionstatechange = () => {
         console.log('Stato connessione ICE:', this.peerConnection?.iceConnectionState);
         
@@ -265,8 +336,33 @@ class CallService {
           this.onIceConnectionStateChangeCallback(this.peerConnection.iceConnectionState);
         }
         
-        if (this.peerConnection?.iceConnectionState === 'failed' || 
-            this.peerConnection?.iceConnectionState === 'closed') {
+        // Gestione stati della connessione ICE
+        switch (this.peerConnection?.iceConnectionState) {
+          case 'connected':
+          case 'completed':
+            console.log('Connessione WebRTC stabilita con successo');
+            break;
+          case 'failed':
+            console.log('Connessione WebRTC fallita - tentativo di riconnessione');
+            // Potremmo tentare di ricreare l'offerta/risposta
+            this.restartIce();
+            break;
+          case 'disconnected':
+            console.log('Connessione WebRTC disconnessa - attesa riconnessione');
+            // Potremmo impostare un timer e terminare la chiamata se non si riconnette
+            break;
+          case 'closed':
+            this.endCall();
+            break;
+        }
+      };
+
+      // Gestione degli stati di connessione
+      this.peerConnection.onconnectionstatechange = () => {
+        console.log('Stato connessione:', this.peerConnection?.connectionState);
+        
+        if (this.peerConnection?.connectionState === 'failed') {
+          console.log('Connessione fallita, terminazione della chiamata');
           this.endCall();
         }
       };
@@ -274,6 +370,34 @@ class CallService {
     } catch (error) {
       console.error('Errore nella creazione della connessione peer:', error);
       throw error;
+    }
+  }
+
+  // Tenta di riavviare la connessione ICE
+  private async restartIce(): Promise<void> {
+    if (!this.peerConnection || !this.currentRecipientId) return;
+    
+    try {
+      const options: RTCOfferOptions = {
+        iceRestart: true,
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: this.isVideoCall
+      };
+      
+      const offer = await this.peerConnection.createOffer(options);
+      await this.peerConnection.setLocalDescription(offer);
+      
+      websocketService.send({
+        type: WebSocketMessageType.CALL_OFFER,
+        recipientId: this.currentRecipientId,
+        offer: offer,
+        isVideo: this.isVideoCall
+      });
+      
+      console.log('Riavvio ICE iniziato');
+    } catch (error) {
+      console.error('Errore durante il riavvio ICE:', error);
+      this.endCall();
     }
   }
 

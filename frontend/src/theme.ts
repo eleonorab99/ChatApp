@@ -1,7 +1,8 @@
-import { createTheme } from '@mui/material/styles';
+import { createTheme, ThemeOptions } from '@mui/material/styles';
 
-// Tema personalizzato per l'applicazione
-const theme = createTheme({
+// Opzioni del tema
+const themeOptions: ThemeOptions = {
+  direction: 'ltr', // Imposta la direzione del testo da sinistra a destra
   palette: {
     mode: 'light',
     primary: {
@@ -59,6 +60,9 @@ const theme = createTheme({
       },
     },
   },
-});
+};
+
+// Crea il tema
+const theme = createTheme(themeOptions);
 
 export default theme;

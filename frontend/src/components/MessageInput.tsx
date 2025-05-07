@@ -6,6 +6,7 @@ import {
   Paper,
   Tooltip,
   InputAdornment,
+  CircularProgress,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -13,13 +14,14 @@ import {
   Mic as MicIcon,
   Videocam as VideocamIcon,
 } from '@mui/icons-material';
-import useChat from '../../hooks/useChat';
-import useCall from '../../hooks/useCall';
+import useChat from '../hooks/useChat';
+import useCall from '../hooks/useCall';
 
 // Componente per l'input di messaggi
 const MessageInput: React.FC = () => {
   const [message, setMessage] = useState('');
   const [fileInputKey, setFileInputKey] = useState(Date.now());
+  const [loading, setLoading] = useState(false);
   const { sendMessage, sendFileMessage, currentRecipient } = useChat();
   const { startCall } = useCall();
 
@@ -40,21 +42,23 @@ const MessageInput: React.FC = () => {
   };
 
   // Gestisce il caricamento di un file
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
 
     const file = e.target.files[0];
     
     if (file) {
-      sendFileMessage(file)
-        .then(() => {
-          // Resetta il campo di input file
-          setFileInputKey(Date.now());
-        })
-        .catch((error) => {
-          console.error('Errore durante l\'invio del file:', error);
-          alert('Errore durante l\'invio del file. Riprova.');
-        });
+      setLoading(true);
+      try {
+        await sendFileMessage(file);
+        // Resetta il campo di input file
+        setFileInputKey(Date.now());
+      } catch (error) {
+        console.error('Errore durante l\'invio del file:', error);
+        alert('Errore durante l\'invio del file. Riprova.');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -96,16 +100,20 @@ const MessageInput: React.FC = () => {
           key={fileInputKey}
           type="file"
           onChange={handleFileUpload}
+          disabled={loading}
         />
         <label htmlFor="file-upload">
-          <Tooltip title="Allega file">
-            <IconButton 
-              color="primary" 
-              component="span"
-              aria-label="allega file"
-            >
-              <AttachFileIcon />
-            </IconButton>
+          <Tooltip title={loading ? 'Caricamento in corso...' : 'Allega file'}>
+            <span>
+              <IconButton 
+                color="primary" 
+                component="span"
+                aria-label="allega file"
+                disabled={loading}
+              >
+                {loading ? <CircularProgress size={24} /> : <AttachFileIcon />}
+              </IconButton>
+            </span>
           </Tooltip>
         </label>
 
@@ -118,6 +126,7 @@ const MessageInput: React.FC = () => {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyPress={handleKeyPress}
+          disabled={loading}
           InputProps={{
             sx: { borderRadius: 6 },
             endAdornment: (
@@ -127,7 +136,7 @@ const MessageInput: React.FC = () => {
                     <IconButton
                       color="primary"
                       onClick={handleSendMessage}
-                      disabled={!message.trim()}
+                      disabled={!message.trim() || loading}
                       edge="end"
                       aria-label="invia messaggio"
                     >
@@ -146,7 +155,7 @@ const MessageInput: React.FC = () => {
             <IconButton
               color="primary"
               onClick={handleAudioCall}
-              disabled={!isCallAvailable}
+              disabled={!isCallAvailable || loading}
               aria-label="chiamata audio"
             >
               <MicIcon />
@@ -159,7 +168,7 @@ const MessageInput: React.FC = () => {
             <IconButton
               color="primary"
               onClick={handleVideoCall}
-              disabled={!isCallAvailable}
+              disabled={!isCallAvailable || loading}
               aria-label="videochiamata"
             >
               <VideocamIcon />

@@ -5,10 +5,11 @@ import { CallState } from '../types/call.types';
 import { WebSocketMessage, WebSocketMessageType } from '../types/chat.types';
 import callService from '../services/callService';
 import websocketService from '../services/websocketService';
+import { OnlineUser } from '../types/user.types';
 
 // Tipi di azioni per il reducer
 type CallAction =
-  | { type: 'CALL_START'; payload: { isVideo: boolean } }
+  | { type: 'CALL_START'; payload: { isVideo: boolean; callPartner: OnlineUser } }
   | { type: 'CALL_CONNECTED' }
   | { type: 'CALL_INCOMING'; payload: { callerId: number; callerName: string; isVideo: boolean; offer: RTCSessionDescriptionInit } }
   | { type: 'CALL_ACCEPTED' }
@@ -45,6 +46,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         isAudioEnabled: true,
         isVideoEnabled: true,
         error: null,
+        callPartner: action.payload.callPartner,
       };
     case 'CALL_CONNECTED':
       return {
@@ -58,6 +60,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         isIncomingCall: true,
         isVideoCall: action.payload.isVideo,
         error: null,
+        callPartner: onlineUsers.find(u => u.userId === action.payload.callerId) || null,
       };
     case 'CALL_ACCEPTED':
       return {
@@ -198,15 +201,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             offer: message.offer,
             isVideo: !!message.isVideo,
           });
-          
-          // Aggiorna lo stato
+
+          // Dispatch dell'azione per la chiamata in arrivo
           dispatch({ 
             type: 'CALL_INCOMING', 
             payload: { 
-              callerId: message.senderId, 
-              callerName, 
-              isVideo: !!message.isVideo,
-              offer: message.offer 
+              callerId: message.senderId,
+              callerName,
+              offer: message.offer,
+              isVideo: !!message.isVideo
             } 
           });
         }
@@ -246,7 +249,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      dispatch({ type: 'CALL_START', payload: { isVideo: withVideo } });
+      dispatch({ 
+        type: 'CALL_START', 
+        payload: { 
+          isVideo: withVideo,
+          callPartner: currentRecipient
+        } 
+      });
       await callService.startCall(currentRecipient.userId, withVideo);
     } catch (error) {
       let errorMessage = 'Errore durante l\'avvio della chiamata';

@@ -8,10 +8,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { WebSocketServer } from 'ws';
 import WebSocket from 'ws';
+import { Session, SessionData } from 'express-session';
 
 import multer from 'multer';
 import dotenv from 'dotenv';
 import { upload as uploadMiddleware } from './middleware/uploadMiddleware';
+import testRoutes from './routes/test.routes';
+import authRoutes from './routes/auth.routes';
+import usersRoutes from './routes/users.routes';
+import chatRoutes from './routes/chat.routes';
 
 // Carica le variabili d'ambiente (con path esplicito)
 const envPath = path.resolve(__dirname, '../.env');
@@ -24,37 +29,65 @@ if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = "mysql://root:password@localhost:3306/chat_app_progetto_finale";
 }
 
-// Estendi l'interfaccia Request per includere l'utente
+// Log di informazioni iniziali
+console.log('DATABASE_URL configurato:', process.env.DATABASE_URL.replace(/:.+@/, ':****@'));
+console.log('JWT_SECRET configurato:', process.env.JWT_SECRET ? '✓' : '✗');
+
+// Verifica connessione al database (test iniziale)
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL
+    }
+  },
+  log: ['query', 'error', 'warn']
+});
+
+// Test di connessione al database all'avvio
+async function testDatabaseConnection() {
+  try {
+    console.log('Test connessione al database...');
+    const result = await prisma.$queryRaw`SELECT 1+1 as result`;
+    console.log('Connessione al database stabilita con successo:', result);
+    return true;
+  } catch (error) {
+    console.error('ERRORE connessione al database:', error);
+    return false;
+  }
+}
+
 declare global {
   namespace Express {
     interface Request {
       user?: {
         id: number;
       };
+      session: Session & Partial<SessionData>; // Corretto il tipo per session
     }
   }
 }
+
 
 // Estendi l'interfaccia WebSocket per includere proprietà aggiuntive
 interface ExtendedWebSocket extends WebSocket {
-  url: string; // Assicurati che sia sempre una stringa
+  url: string;
   userId?: number;
   username?: string;
+  isAlive?: boolean;
 }
 
 const app = express();
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL
-    }
-  }
-});
 const port = process.env.PORT || 3000;
 
 // Middleware CORS personalizzato
 app.use((req: Request, res: Response, next: NextFunction): void => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:5173');
+  const allowedOrigins = ['http://localhost:5173', 'https://localhost:5173'];
+  const origin = req.headers.origin;
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
@@ -69,6 +102,15 @@ app.use((req: Request, res: Response, next: NextFunction): void => {
 
 // Middleware per parsare JSON
 app.use(express.json());
+
+// Middleware per gestire gli errori
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  console.error('Errore:', err);
+  res.status(500).json({
+    message: 'Internal Server Error',
+    error: err.message
+  });
+});
 
 // Middleware di autenticazione
 function authenticate(req: Request, res: Response, next: NextFunction): void {
@@ -85,43 +127,51 @@ function authenticate(req: Request, res: Response, next: NextFunction): void {
   }
 }
 
-// Endpoint per il login
-app.post('/api/auth/login', async (req: Request, res: Response): Promise<void> => {
-  const { email, password } = req.body;
-  try {
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return void res.status(401).json({ message: 'Invalid credentials' });
-    }
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
-    return void res.json({ token, user: { id: user.id, username: user.username, email: user.email } });
-  } catch (error) {
-    console.error('Errore durante il login:', error);
-    return void res.status(500).json({ message: 'Internal Server Error' });
-  }
+// Monta le route
+app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/test', testRoutes);
+
+// Rotte di base per verificare che il server funzioni
+app.get('/', (req: Request, res: Response) => {
+  res.send('Server operativo! 👍');
 });
 
-// Endpoint per la registrazione
-app.post('/api/auth/register', async (req: Request, res: Response): Promise<void> => {
-  const { email, password, username } = req.body;
-  try {
-    const existingUser = await prisma.user.findFirst({
-      where: { OR: [{ email }, { username }] },
-    });
-    if (existingUser) {
-      return void res.status(409).json({ message: 'Email or username already exists' });
+// Configura multer per il caricamento dei file
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
     }
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: { email, password: hashedPassword, username },
-    });
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || 'secret', { expiresIn: '24h' });
-    return void res.status(201).json({ token, user: { id: user.id, username: user.username, email: user.email } });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `${Date.now()}-${file.originalname}`;
+    cb(null, uniqueName);
+  },
+});
+
+const upload = multer({ storage });
+
+// Endpoint per servire i file caricati
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Endpoint per il caricamento dei file
+app.post('/api/upload', upload.single('file'), (req: Request, res: Response): void => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ message: 'No file uploaded' });
+      return;
+    }
+    
+    // Crea l'URL completo per il file
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    res.json({ fileUrl });
   } catch (error) {
-    console.error('Errore durante la registrazione:', error);
-    return void res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Errore durante il caricamento del file:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
   }
 });
 
@@ -168,69 +218,88 @@ app.get('/api/messages', authenticate, async (req: Request, res: Response): Prom
   }
 });
 
-// Configura multer per il caricamento dei file
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${file.originalname}`;
-    cb(null, uniqueName);
-  },
-});
-
-const upload = multer({ storage });
-
-// Endpoint per servire i file caricati
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-
-// Endpoint per il caricamento dei file
-app.post('/api/upload', upload.single('file'), (req: Request, res: Response): void => {
+// Avvia il server
+async function startServer() {
   try {
-    if (!req.file) {
-      res.status(400).json({ message: 'No file uploaded' });
-      return;
+    // Testa la connessione al database
+    const dbConnected = await testDatabaseConnection();
+    if (!dbConnected) {
+      console.error('Impossibile connettersi al database. Verifica la configurazione.');
+      process.exit(1);
     }
     
-    // Crea l'URL completo per il file
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-    res.json({ fileUrl });
+    let server;
+    
+    try {
+      // Percorsi dei certificati
+      const keyPath = path.join(__dirname, '../../certificati/domain.key');
+      const certPath = path.join(__dirname, '../../certificati/domain.crt');
+      console.log('Percorso della chiave:', keyPath);
+      console.log('Percorso del certificato:', certPath);
+
+      // Verifica che i certificati esistano
+      if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+        throw new Error('Certificati SSL non trovati');
+      }
+
+      // Crea server HTTPS
+      server = https.createServer(
+        {
+          key: fs.readFileSync(keyPath, 'utf8'),
+          cert: fs.readFileSync(certPath, 'utf8'),
+          passphrase: 'elia',
+          requestCert: false,
+          rejectUnauthorized: false
+        },
+        app
+      );
+      
+      console.log('Server HTTPS configurato con successo');
+    } catch (error) {
+      console.error('Errore nella configurazione HTTPS:', error);
+      console.log('Utilizzo HTTP come fallback');
+      
+      // Fallback a HTTP
+      server = http.createServer(app);
+    }
+
+    // Configura il server WebSocket
+    setupWebSocketServer(server);
+    
+    // Middleware per servire file statici
+    app.use(express.static(path.join(__dirname, '../public')));
+
+    // Avvia il server
+    server.listen(port, () => {
+      console.log(`Server in ascolto su ${server instanceof https.Server ? 'https' : 'http'}://localhost:${port}`);
+      console.log(`URL Database: ${process.env.DATABASE_URL?.replace(/:.+@/, ':****@')}`);
+      console.log(`Frontend URL atteso: ${server instanceof https.Server ? 'https' : 'http'}://localhost:5173`);
+    });
   } catch (error) {
-    console.error('Errore durante il caricamento del file:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-try {
-  // Percorsi dei certificati
-  const keyPath = path.join(__dirname, '../certificati/domain.key');
-  const certPath = path.join(__dirname, '../certificati/domain.crt');
-  console.log('Percorso della chiave:', keyPath);
-  console.log('Percorso del certificato:', certPath);
-
-  // Verifica che i certificati esistano
-  if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-    console.error('Certificati SSL non trovati. Verificare la presenza dei file nella cartella certificati.');
+    console.error('Errore fatale durante l\'avvio del server:', error);
     process.exit(1);
   }
+}
 
-  // Crea server HTTPS
-  const server = https.createServer(
-    {
-      key: fs.readFileSync(keyPath, 'utf8'),
-      cert: fs.readFileSync(certPath, 'utf8'),
-      passphrase: 'elia',
-    },
-    app
-  );
-
-  // Crea server WebSocket
-  // Crea server WebSocket
-  const wss = new WebSocketServer({ server });
+// Configura il server WebSocket
+function setupWebSocketServer(server: http.Server | https.Server) {
+  // Crea server WebSocket con configurazione CORS
+  const wss = new WebSocketServer({ 
+    server,
+    // Aggiungi configurazione CORS per WebSocket
+    verifyClient: (info, callback) => {
+      const origin = info.origin || info.req.headers.origin;
+      const allowedOrigins = ['http://localhost:5173', 'https://localhost:5173'];
+      
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(true);
+      } else {
+        console.log('WebSocket connection rejected from origin:', origin);
+        callback(false, 403, 'Forbidden');
+      }
+    }
+  });
+  
   // Mappa per tenere traccia degli utenti online
   const onlineUsers = new Map<number, { userId: number; username: string }>();
 
@@ -238,31 +307,32 @@ try {
   const sendOnlineUsers = () => {
     const onlineUsersList = Array.from(onlineUsers.values());
     wss.clients.forEach((client) => {
-      const clientWs = client as ExtendedWebSocket;
-      if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(JSON.stringify({ type: 'online_users', data: onlineUsersList }));
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'online_users', data: onlineUsersList }));
       }
     });
   };
 
   // Gestisci connessioni WebSocket
   wss.on('connection', async (ws: WebSocket, req: http.IncomingMessage) => {
-    console.log('New WebSocket connection attempt');
+    console.log('Nuova connessione WebSocket da:', req.headers.origin);
     const extWs = ws as ExtendedWebSocket;
+    extWs.isAlive = true;
 
     try {
       // Estrai il token dall'URL
-      const url = req.url ? new URL(req.url, `https://${req.headers.host}`) : null;
+      const url = req.url ? new URL(req.url, `http://${req.headers.host}`) : null;
       const token = url?.searchParams.get('token');
+      
       if (!token) {
+        console.error('Token mancante nella connessione WebSocket');
         ws.close(4001, 'Unauthorized: Missing token');
         return;
       }
 
-      let userId: number;
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as { userId: number };
-        userId = decoded.userId;
+        const userId = decoded.userId;
         extWs.userId = userId;
 
         // Ottieni le informazioni dell'utente dal database
@@ -270,158 +340,102 @@ try {
           where: { id: userId },
           select: { id: true, username: true },
         });
+
         if (!user) {
+          console.error('Utente non trovato:', userId);
           ws.close(4001, 'User not found');
           return;
         }
+
         extWs.username = user.username;
+        console.log('Utente connesso:', user.username, '(ID:', userId, ')');
 
         // Aggiungi l'utente alla mappa degli utenti online
         onlineUsers.set(userId, { userId: user.id, username: user.username });
-      } catch (error) {
-        ws.close(4001, 'Unauthorized: Invalid token');
-        return;
-      }
+        
+        // Invia la lista aggiornata degli utenti online a tutti i client
+        sendOnlineUsers();
 
-      // Invia la lista degli utenti online
-      const onlineUsersList = Array.from(onlineUsers.values());
-      if (extWs.readyState === WebSocket.OPEN) {
-        extWs.send(JSON.stringify({ type: 'online_users', data: onlineUsersList }));
-      }
-
-      // Notifica agli altri utenti che questo utente è online
-      wss.clients.forEach((client) => {
-        const clientWs = client as ExtendedWebSocket;
-        if (clientWs !== extWs && clientWs.readyState === WebSocket.OPEN) {
-          clientWs.send(
-            JSON.stringify({
-              type: 'user_online',
-              data: {
-                userId: userId,
-                username: extWs.username,
-              },
-            })
-          );
-        }
-      });
-
-      // Gestisci i messaggi WebSocket
-      ws.on('message', async (message: string) => {
-        try {
-          const data = JSON.parse(message);
-          console.log('Ricevuto messaggio:', data.type);
-
-          // Gestisci i messaggi di chat esistenti
-          if (data.type === 'chat_message') {
-            const { content, receiverId, fileUrl } = data;
-
-            // Salva il messaggio nel database
-            const savedMessage = await prisma.message.create({
-              data: {
-                content,
-                senderId: userId,
-                receiverId: receiverId || null,
-                fileUrl: fileUrl || null,
-              },
-              include: {
-                sender: true,
-                receiver: true,
-              },
-            });
-
-            // Invia il messaggio a tutti i client se è un messaggio globale
-            if (receiverId === null) {
-              wss.clients.forEach((client) => {
-                if (client.readyState === WebSocket.OPEN) {
-                  client.send(JSON.stringify({ type: 'new_message', data: savedMessage }));
-                }
-              });
-            } else {
-              // Invia il messaggio al mittente per conferma
-              if (extWs.readyState === WebSocket.OPEN) {
-                extWs.send(JSON.stringify({ type: 'new_message', data: savedMessage }));
-              }
-
-              // Invia il messaggio al destinatario specifico
-              wss.clients.forEach((client) => {
-                const clientWs = client as ExtendedWebSocket;
-                if (clientWs.readyState === WebSocket.OPEN && clientWs !== extWs && clientWs.userId === receiverId) {
-                  clientWs.send(JSON.stringify({ type: 'new_message', data: savedMessage }));
-                }
-              });
-            }
-          }
-
-          // Gestisci i messaggi WebRTC
-          if (['call_offer', 'call_answer', 'ice_candidate', 'call_end', 'call_reject'].includes(data.type)) {
-            console.log(`Gestisco messaggio WebRTC di tipo ${data.type} da ${extWs.userId} a ${data.recipientId}`);
-            
-            // Trova il destinatario
-            const recipient = Array.from(wss.clients).find(
-              (client) => (client as ExtendedWebSocket).userId === data.recipientId
-            ) as ExtendedWebSocket;
-
-            if (recipient && recipient.readyState === WebSocket.OPEN) {
-              console.log(`Inoltro messaggio ${data.type} al destinatario ${data.recipientId}`);
-              // Aggiungi il nome utente del mittente al messaggio
-              const messageWithSender = {
-                ...data,
-                senderId: extWs.userId,
-                senderUsername: extWs.username
-              };
-              recipient.send(JSON.stringify(messageWithSender));
-              console.log('Messaggio inoltrato con successo');
-            } else {
-              console.log(`Destinatario ${data.recipientId} non trovato o non disponibile`);
-              // Invia un messaggio di errore al mittente
-              if (extWs.readyState === WebSocket.OPEN) {
-                extWs.send(JSON.stringify({
-                  type: 'call_error',
-                  error: 'Destinatario non disponibile'
-                }));
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Errore durante l\'elaborazione del messaggio:', error);
-        }
-      });
-
-      // Gestisci la disconnessione
-      extWs.on('close', () => {
-        // Rimuovi l'utente dalla mappa degli utenti online
-        onlineUsers.delete(userId);
-
-        // Notifica agli altri utenti che questo utente è offline
-        wss.clients.forEach((client) => {
-          const clientWs = client as ExtendedWebSocket;
-          if (clientWs.readyState === WebSocket.OPEN) {
-            clientWs.send(
-              JSON.stringify({
-                type: 'user_offline',
-                data: {
-                  userId: userId,
-                },
-              })
-            );
+        // Gestisci la disconnessione
+        ws.on('close', () => {
+          console.log('WebSocket disconnesso per utente:', user.username);
+          if (extWs.userId) {
+            onlineUsers.delete(extWs.userId);
+            sendOnlineUsers();
           }
         });
-      });
+
+        // Gestisci i messaggi
+        ws.on('message', async (message: string) => {
+          try {
+            const data = JSON.parse(message);
+            console.log('Messaggio WebSocket ricevuto:', data.type);
+            
+            if (data.type === 'chat_message') {
+              // Gestione messaggi chat
+              const savedMessage = await prisma.message.create({
+                data: {
+                  content: data.content,
+                  senderId: userId,
+                  receiverId: data.receiverId || null,
+                  fileUrl: data.fileUrl || null,
+                  fileSize: data.fileSize || null,
+                },
+                include: {
+                  sender: true,
+                  receiver: true,
+                },
+              });
+
+              // Invia il messaggio ai destinatari appropriati
+              wss.clients.forEach((client) => {
+                const clientWs = client as ExtendedWebSocket;
+                if (clientWs.readyState === WebSocket.OPEN) {
+                  if (!data.receiverId || clientWs.userId === data.receiverId || clientWs.userId === userId) {
+                    clientWs.send(JSON.stringify({ type: 'new_message', data: savedMessage }));
+                  }
+                }
+              });
+            }
+          } catch (error) {
+            console.error('Errore durante l\'elaborazione del messaggio:', error);
+          }
+        });
+
+      } catch (error) {
+        console.error('Errore nella verifica del token:', error);
+        ws.close(4001, 'Invalid token');
+      }
+
     } catch (error) {
-      console.error('Errore durante la connessione WebSocket:', error);
-      ws.close();
+      console.error('Errore durante la gestione della connessione WebSocket:', error);
+      ws.close(1011, 'Internal server error');
     }
   });
 
-  // Middleware per servire file statici
-  app.use(express.static(path.join(__dirname, '../public')));
+  // Aggiungi heartbeat per mantenere le connessioni attive
+  const interval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      const extWs = ws as ExtendedWebSocket;
+      if (extWs.isAlive === false) {
+        console.log('WebSocket non risponde, chiusura connessione');
+        return ws.terminate();
+      }
+      
+      extWs.isAlive = false;
+      ws.ping();
+    });
+  }, 30000);
 
-  // Avvia il server HTTPS
-  server.listen(port, () => {
-    console.log(`Server in ascolto su https://localhost:${port}`);
-    console.log(`URL Database: ${process.env.DATABASE_URL}`);
-    console.log(`Frontend URL atteso: http://localhost:5173`);
+  wss.on('close', () => {
+    clearInterval(interval);
   });
-} catch (error) {
-  console.error('Errore durante l\'avvio del server:', error);
+
+  return wss;
 }
+
+// Avvia il server
+startServer().catch(error => {
+  console.error('Errore fatale all\'avvio del server:', error);
+  process.exit(1);
+});

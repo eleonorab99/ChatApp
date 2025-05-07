@@ -1,11 +1,8 @@
 import express from 'express';
-import { handleWebSocketConnection } from '../websocket/controllers/websocket.controllers';
 
 const router = express.Router();
 
-router.ws('/chat', (ws, req) => {
-    const wss = (req as any).wss;
-    handleWebSocketConnection(wss, ws, req);
-});
+// Qui possiamo aggiungere altre route HTTP relative alla chat se necessario
+// Per esempio, route per recuperare la cronologia dei messaggi, ecc.
 
 export default router;

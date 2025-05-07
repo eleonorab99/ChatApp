@@ -1,16 +1,23 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
-  Button,
   TextField,
   Typography,
   Container,
   Paper,
   Alert,
+  InputAdornment,
+  IconButton,
+  Button,
 } from '@mui/material';
-import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import useAuth from '../../hooks/useAuth';
+import {
+  Visibility,
+  VisibilityOff,
+} from '@mui/icons-material';
+import useAuth from '../../../hooks/useAuth';
+import useApp from '../../../hooks/useApp';
+import './RegisterStyle.css';
 
 // Componente per la registrazione
 const Register: React.FC = () => {
@@ -18,8 +25,11 @@ const Register: React.FC = () => {
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { register, loading } = useAuth();
+  const { addNotification } = useApp();
   const navigate = useNavigate();
 
   // Validazione dei campi del form
@@ -58,6 +68,13 @@ const Register: React.FC = () => {
     try {
       setError(null);
       await register({ email, password, username });
+      
+      addNotification({
+        type: 'success',
+        message: 'Registrazione completata con successo',
+        autoHideDuration: 3000
+      });
+      
       navigate('/');
     } catch (err) {
       let errorMessage = 'Errore durante la registrazione';
@@ -74,42 +91,45 @@ const Register: React.FC = () => {
     }
   };
 
+  // Gestisce la pressione del tasto Invio
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSubmit(e);
+    }
+  };
+
+  // Cambia la visibilità della password
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
+
+  // Cambia la visibilità della conferma password
+  const toggleConfirmPasswordVisibility = () => {
+    setShowConfirmPassword(!showConfirmPassword);
+  };
+
+  // Naviga alla pagina di login
+  const navigateToLogin = () => {
+    navigate('/login');
+  };
+
   return (
-    <Container component="main" maxWidth="xs">
-      <Box
-        sx={{
-          marginTop: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}
-      >
-        <Paper
-          elevation={3}
-          sx={{
-            padding: 4,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            borderRadius: 2,
-            width: '100%',
-          }}
-        >
-          <Box
-            sx={{
-              backgroundColor: 'primary.main',
-              borderRadius: '50%',
-              padding: 1,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              mb: 2,
-            }}
+    <Container component="main" maxWidth="xs" className="container">
+      <Box className= "boxWrapper">
+        <Paper elevation={3} className= "paper">
+          <Typography 
+            component="h1" 
+            variant="h4" 
+            className="title"
           >
-            <PersonAddIcon sx={{ color: 'white' }} />
-          </Box>
-          <Typography component="h1" variant="h5" sx={{ mb: 3 }}>
-            Registrati
+            DROCSID
+          </Typography>
+          <Typography 
+            component="h2" 
+            variant="h6" 
+            className="subtitle"
+          >
+            Registration
           </Typography>
           
           {error && (
@@ -118,7 +138,7 @@ const Register: React.FC = () => {
             </Alert>
           )}
           
-          <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
+          <Box component="form" onSubmit={handleSubmit} noValidate className="form">
             <TextField
               margin="normal"
               required
@@ -130,19 +150,21 @@ const Register: React.FC = () => {
               autoFocus
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              sx={{ mb: 2 }}
+              onKeyPress={handleKeyPress}
+              className="textField"
             />
             <TextField
               margin="normal"
               required
               fullWidth
               id="email"
-              label="Email"
+              label="E-mail"
               name="email"
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              sx={{ mb: 2 }}
+              onKeyPress={handleKeyPress}
+              className="textField"
             />
             <TextField
               margin="normal"
@@ -150,43 +172,61 @@ const Register: React.FC = () => {
               fullWidth
               name="password"
               label="Password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               id="password"
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              sx={{ mb: 2 }}
+              onKeyPress={handleKeyPress}
+              className="textField"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={togglePasswordVisibility}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                )
+              }}
             />
             <TextField
               margin="normal"
               required
               fullWidth
               name="confirmPassword"
-              label="Conferma Password"
-              type="password"
+              label="Conferma password"
+              type={showConfirmPassword ? 'text' : 'password'}
               id="confirmPassword"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              sx={{ mb: 3 }}
+              onKeyPress={handleKeyPress}
+              className="textField"
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle confirm password visibility"
+                      onClick={toggleConfirmPasswordVisibility}
+                      edge="end"
+                    >
+                      {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                )
+              }}
             />
             <Button
               type="submit"
               fullWidth
               variant="contained"
-              disabled={loading}
-              sx={{ mt: 2, mb: 2 }}
+              className="submitButton"
             >
-              {loading ? 'Registrazione in corso...' : 'Registrati'}
+              Registrati
             </Button>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Box>
-                <Link to="/login" style={{ textDecoration: 'none' }}>
-                  <Typography variant="body2" color="primary">
-                    Hai già un account? Accedi
-                  </Typography>
-                </Link>
-              </Box>
-            </Box>
           </Box>
         </Paper>
       </Box>

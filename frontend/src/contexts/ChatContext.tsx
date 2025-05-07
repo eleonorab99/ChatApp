@@ -1,4 +1,4 @@
-import React, { createContext, useReducer, useEffect, useContext } from 'react';
+import React, { createContext, useReducer, useEffect, useContext, useCallback } from 'react';
 import { AuthContext } from './AuthContext';
 import { ChatState, Message, OnlineUser, WebSocketMessage, WebSocketMessageType } from '../types/chat.types';
 import chatService from '../services/chatService';
@@ -15,7 +15,8 @@ type ChatAction =
   | { type: 'NEW_MESSAGE'; payload: Message }
   | { type: 'SET_CURRENT_RECIPIENT'; payload: OnlineUser | null }
   | { type: 'INCREMENT_UNREAD'; payload: number }
-  | { type: 'RESET_UNREAD'; payload: number };
+  | { type: 'RESET_UNREAD'; payload: number }
+  | { type: 'CLEAR_MESSAGES' };
 
 // Stato iniziale
 const initialState: ChatState = {
@@ -100,6 +101,11 @@ const chatReducer = (state: ChatState, action: ChatAction): ChatState => {
           [action.payload]: 0,
         },
       };
+    case 'CLEAR_MESSAGES':
+      return {
+        ...state,
+        messages: []
+      };
     default:
       return state;
   }
@@ -130,7 +136,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { isAuthenticated, user } = useContext(AuthContext);
 
   // Gestisce i messaggi WebSocket
-  const handleWebSocketMessage = (message: WebSocketMessage) => {
+  const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
     switch (message.type) {
       case WebSocketMessageType.ONLINE_USERS:
         if (Array.isArray(message.data)) {
@@ -166,7 +172,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       default:
         break;
     }
-  };
+  }, [state.currentRecipient, user]);
 
   // Configura il listener WebSocket quando l'autenticazione cambia
   useEffect(() => {
@@ -174,72 +180,85 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const unsubscribe = websocketService.addMessageListener(handleWebSocketMessage);
       return unsubscribe;
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, handleWebSocketMessage]);
 
   // Funzione per inviare un messaggio
-  const sendMessage = (content: string) => {
+  const sendMessage = useCallback((content: string) => {
     if (!content.trim()) return;
     
     websocketService.sendChatMessage(
       content,
       state.currentRecipient?.userId
     );
-  };
+  }, [state.currentRecipient]);
 
   // Funzione per inviare un messaggio con un file
-  const sendFileMessage = async (file: File): Promise<void> => {
+  const sendFileMessage = useCallback(async (file: File): Promise<void> => {
     try {
       const response = await chatService.uploadFile(file);
       websocketService.sendChatMessage(
         `Ha condiviso un file: ${file.name}`,
         state.currentRecipient?.userId,
-        response.fileUrl
+        response.fileUrl,
+        file.size
       );
     } catch (error) {
-      let errorMessage = 'Errore durante il recupero dei messaggi';
+      console.error('Errore durante l\'upload del file:', error);
+      let errorMessage = 'Errore durante il caricamento del file';
       if (error instanceof Error) {
         errorMessage = error.message;
       }
       dispatch({ type: 'FETCH_MESSAGES_FAILURE', payload: errorMessage });
+      throw error;
     }
-  };
+  }, [state.currentRecipient]);
 
   // Funzione per recuperare i messaggi
-  const fetchMessages = async () => {
-    if (state.currentRecipient) {
-      await fetchMessagesForRecipient(state.currentRecipient.userId);
-    }
-  };
-
-  // Funzione per ottenere il numero totale di messaggi non letti
-  const getTotalUnreadCount = (): number => {
-    return Object.values(state.unreadCounts).reduce((acc, count) => acc + count, 0);
-  };
-
-  // Funzione per impostare il destinatario corrente
-  const setCurrentRecipient = (recipient: OnlineUser | null) => {
-    dispatch({ type: 'SET_CURRENT_RECIPIENT', payload: recipient });
-    if (recipient) {
-      fetchMessagesForRecipient(recipient.userId);
-    }
-  };
-
-  // Funzione per recuperare i messaggi per un destinatario specifico
-  const fetchMessagesForRecipient = async (recipientId: number) => {
+  const fetchMessages = useCallback(async () => {
+    if (!isAuthenticated) return;
+    
+    dispatch({ type: 'CLEAR_MESSAGES' });
     dispatch({ type: 'FETCH_MESSAGES_START' });
+    
     try {
-      const messages = await chatService.getMessages(recipientId);
+      let messages: Message[] = [];
+      
+      if (state.currentRecipient) {
+        messages = await chatService.getMessages(state.currentRecipient.userId);
+        // Resetta il contatore dei messaggi non letti
+        dispatch({ type: 'RESET_UNREAD', payload: state.currentRecipient.userId });
+      } else {
+        // Messaggi per la chat globale
+        messages = await chatService.getMessages();
+      }
+      
       dispatch({ type: 'FETCH_MESSAGES_SUCCESS', payload: messages });
-      // Resetta il contatore dei messaggi non letti
-      dispatch({ type: 'RESET_UNREAD', payload: recipientId });
     } catch (error) {
+      console.error('Errore durante il recupero dei messaggi:', error);
       let errorMessage = 'Errore durante il recupero dei messaggi';
       if (error instanceof Error) {
         errorMessage = error.message;
       }
       dispatch({ type: 'FETCH_MESSAGES_FAILURE', payload: errorMessage });
     }
-  };
+  }, [isAuthenticated, state.currentRecipient]);
+
+  // Effettua il fetch dei messaggi quando cambia il destinatario
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchMessages();
+    }
+  }, [isAuthenticated, state.currentRecipient, fetchMessages]);
+
+  // Funzione per ottenere il numero totale di messaggi non letti
+  const getTotalUnreadCount = useCallback((): number => {
+    return Object.values(state.unreadCounts).reduce((acc, count) => acc + count, 0);
+  }, [state.unreadCounts]);
+
+  // Funzione per impostare il destinatario corrente
+  const setCurrentRecipient = useCallback((recipient: OnlineUser | null) => {
+    dispatch({ type: 'SET_CURRENT_RECIPIENT', payload: recipient });
+  }, []);
 
   // Valore del contesto
   const chatContextValue: ChatContextType = {
@@ -258,3 +277,4 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
+export default ChatProvider;

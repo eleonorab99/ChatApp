@@ -11,7 +11,9 @@ const chatService = {
   },
 
   // Carica un file
-  uploadFile: async (file: File): Promise<{ fileUrl: string }> => {
+  uploadFile: async (file: File): Promise<{
+    fileSize: number; fileUrl: string 
+}> => {
     const formData = new FormData();
     formData.append('file', file);
 

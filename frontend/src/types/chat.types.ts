@@ -32,7 +32,8 @@ export enum WebSocketMessageType {
   ICE_CANDIDATE = 'ice_candidate',
   CALL_END = 'call_end',
   CALL_REJECT = 'call_reject',
-  CALL_ERROR = 'call_error'
+  CALL_ERROR = 'call_error',
+  CONNECTION_ERROR = 'connection_error' // Nuovo tipo per errori di connessione
 }
 
 // Interfaccia per un messaggio WebSocket
@@ -44,6 +45,7 @@ export interface WebSocketMessage {
   senderUsername?: string;
   content?: string;
   fileUrl?: string;
+  fileSize?: number;
   offer?: RTCSessionDescriptionInit;
   answer?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
@@ -59,4 +61,5 @@ export interface ChatState {
   error: string | null;
   currentRecipient: OnlineUser | null;
   unreadCounts: Record<number, number>;
+  connectionStatus?: 'connected' | 'disconnected' | 'reconnecting'; // Nuovo campo per lo stato della connessione
 }

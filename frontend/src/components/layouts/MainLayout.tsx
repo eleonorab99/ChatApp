@@ -10,15 +10,20 @@ import {
   MenuItem,
   Container,
   Badge,
+  Tooltip
 } from '@mui/material';
 import {
   AccountCircle,
   Notifications,
   ExitToApp,
+  Settings
 } from '@mui/icons-material';
 import useAuth from '../../hooks/useAuth';
 import useChat from '../../hooks/useChat';
+import useApp from '../../hooks/useApp';
 import IncomingCallDialog from '../calls/IncomingCallDialog';
+import NetworkStatus from '../common/NetworkStatus';
+import ConnectionStatus from '../common/ConnectionStatus'; // Importa il nuovo componente
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -28,6 +33,7 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const { user, logout } = useAuth();
   const { getTotalUnreadCount } = useChat();
+  const { addNotification } = useApp();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
@@ -44,37 +50,68 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   // Gestisce il logout
   const handleLogout = async () => {
     handleClose();
-    await logout();
-    navigate('/login');
+    try {
+      await logout();
+      addNotification({
+        type: 'success',
+        message: 'Logout effettuato con successo',
+        autoHideDuration: 3000
+      });
+      navigate('/login');
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        message: 'Errore durante il logout',
+        autoHideDuration: 5000
+      });
+    }
   };
 
   return (
     <>
       <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        {/* Componente per mostrare lo stato della connessione di rete */}
+        <NetworkStatus />
+        
         <AppBar position="static">
           <Toolbar>
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
               Chat App
+              <ConnectionStatus /> {/* Aggiungi l'indicatore di stato della connessione */}
             </Typography>
+            
             {user && (
-              <Box>
-                <Badge
-                  badgeContent={getTotalUnreadCount()}
-                  color="error"
-                  sx={{ marginRight: 2 }}
-                >
-                  <Notifications />
-                </Badge>
-                <IconButton
-                  size="large"
-                  aria-label="account of current user"
-                  aria-controls="menu-appbar"
-                  aria-haspopup="true"
-                  onClick={handleMenu}
-                  color="inherit"
-                >
-                  <AccountCircle />
-                </IconButton>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Tooltip title="Notifiche">
+                  <IconButton color="inherit" sx={{ mr: 1 }}>
+                    <Badge
+                      badgeContent={getTotalUnreadCount()}
+                      color="error"
+                    >
+                      <Notifications />
+                    </Badge>
+                  </IconButton>
+                </Tooltip>
+                
+                <Tooltip title="Impostazioni">
+                  <IconButton color="inherit" sx={{ mr: 1 }}>
+                    <Settings />
+                  </IconButton>
+                </Tooltip>
+                
+                <Tooltip title="Profilo">
+                  <IconButton
+                    size="large"
+                    aria-label="account of current user"
+                    aria-controls="menu-appbar"
+                    aria-haspopup="true"
+                    onClick={handleMenu}
+                    color="inherit"
+                  >
+                    <AccountCircle />
+                  </IconButton>
+                </Tooltip>
+                
                 <Menu
                   id="menu-appbar"
                   anchorEl={anchorEl}

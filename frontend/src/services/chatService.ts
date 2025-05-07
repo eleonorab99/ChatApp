@@ -9,8 +9,14 @@ let contactsRequestFailed = false;
 const chatService = {
   // Ottiene i messaggi tra l'utente corrente e un destinatario specifico
   getMessages: async (recipientId: number): Promise<Message[]> => {
+    console.log(`Recupero messaggi per recipientId: ${recipientId}`);
     try {
-      const response = await api.get<Message[]>(`/messages?recipientId=${recipientId}`);
+      // Verifica che l'API URL sia corretto
+      const apiUrl = `/messages?recipientId=${recipientId}`;
+      console.log('Chiamata API a:', apiUrl);
+      
+      const response = await api.get<Message[]>(apiUrl);
+      console.log(`Ricevuti ${response.data.length} messaggi`);
       return response.data;
     } catch (error) {
       console.error('Errore nel recupero dei messaggi:', error);
@@ -23,6 +29,7 @@ const chatService = {
   getContacts: async (): Promise<Contact[]> => {
     // Se abbiamo già provato e fallito, non riprovare
     if (contactsRequestFailed) {
+      console.log('Uso contatti dal localStorage (richiesta precedente fallita)');
       const localContacts = localStorage.getItem('chat_contacts');
       if (localContacts) {
         try {
@@ -36,7 +43,14 @@ const chatService = {
     }
 
     try {
-      const response = await api.get<Contact[]>('/contacts');
+      console.log('Recupero contatti dal server...');
+      // Verifica che l'API URL sia corretto - controlla che ci sia /api
+      const apiUrl = '/contacts';
+      console.log('Chiamata API a:', apiUrl);
+      
+      const response = await api.get<Contact[]>(apiUrl);
+      console.log(`Ricevuti ${response.data.length} contatti`);
+      
       // Reset flag in caso di successo
       contactsRequestFailed = false;
       return response.data;
@@ -71,16 +85,22 @@ const chatService = {
   uploadFile: async (file: File): Promise<{
     fileSize: number; fileUrl: string 
   }> => {
+    console.log(`Caricamento file: ${file.name} (${file.size} bytes)`);
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const response = await api.post<{ fileUrl: string }>('/upload', formData, {
+      // Verifica che l'API URL sia corretto
+      const apiUrl = '/upload';
+      console.log('Chiamata API a:', apiUrl);
+      
+      const response = await api.post<{ fileUrl: string }>(apiUrl, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-
+      
+      console.log('File caricato con successo, URL:', response.data.fileUrl);
       return {
         fileUrl: response.data.fileUrl,
         fileSize: file.size
@@ -94,11 +114,18 @@ const chatService = {
   // Segna i messaggi come letti
   markMessagesAsRead: async (senderId: number): Promise<void> => {
     try {
+      console.log(`Segno come letti i messaggi da: ${senderId}`);
       await api.post('/messages/read', { senderId });
     } catch (error) {
       console.error('Errore nel marcare i messaggi come letti:', error);
     }
   },
+  
+  // Reset dei tentativi falliti - utile per debugging
+  resetFailedAttempts: () => {
+    contactsRequestFailed = false;
+    console.log('Reset del flag contactsRequestFailed');
+  }
 };
 
 export default chatService;

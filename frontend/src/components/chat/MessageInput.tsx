@@ -7,13 +7,17 @@ import {
   Tooltip,
   InputAdornment,
   CircularProgress,
+  Popper,
+  ClickAwayListener,
 } from '@mui/material';
 import {
   Send as SendIcon,
   AttachFile as AttachFileIcon,
   Mic as MicIcon,
   Videocam as VideocamIcon,
+  EmojiEmotions as EmojiIcon,
 } from '@mui/icons-material';
+import EmojiPicker, { EmojiClickData } from 'emoji-picker-react';
 import useChat from '../../hooks/useChat';
 import useCall from '../../hooks/useCall';
 import { useTranslation } from 'react-i18next';
@@ -26,10 +30,14 @@ const MessageInput: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [emojiPickerAnchor, setEmojiPickerAnchor] = useState<null | HTMLElement>(null);
   
   const { sendMessage, sendFileMessage, currentRecipient } = useChat();
   const { startCall } = useCall();
   const { t } = useTranslation();
+
+  // Emoji picker aperto?
+  const emojiPickerOpen = Boolean(emojiPickerAnchor);
 
   // Gestisce l'invio del messaggio
   const handleSendMessage = () => {
@@ -111,6 +119,21 @@ const MessageInput: React.FC = () => {
   const handleVideoCall = () => {
     startCall(true);
   };
+  
+  // Gestisce il click sull'icona emoji
+  const handleEmojiButtonClick = (event: React.MouseEvent<HTMLElement>) => {
+    setEmojiPickerAnchor(emojiPickerAnchor ? null : event.currentTarget);
+  };
+  
+  // Gestisce il click fuori dal picker emoji
+  const handleEmojiPickerClose = () => {
+    setEmojiPickerAnchor(null);
+  };
+  
+  // Gestisce la selezione di un emoji
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setMessage(prevMessage => prevMessage + emojiData.emoji);
+  };
 
   // Determina se i controlli per le chiamate devono essere attivi
   const isCallAvailable = !!currentRecipient;
@@ -123,8 +146,6 @@ const MessageInput: React.FC = () => {
       elevation={3}
       sx={{
         p: 2,
-        borderTop: 1,
-        borderColor: 'divider',
         backgroundColor: 'background.paper',
       }}
     >
@@ -172,6 +193,34 @@ const MessageInput: React.FC = () => {
             </span>
           </Tooltip>
         </label>
+        
+        {/* Pulsante emoji */}
+        <Tooltip title="Inserisci emoji">
+          <span>
+            <IconButton
+              color="primary"
+              onClick={handleEmojiButtonClick}
+              disabled={isInputDisabled}
+              aria-label="inserisci emoji"
+            >
+              <EmojiIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
+
+        {/* Picker emoji */}
+        <Popper 
+          open={emojiPickerOpen} 
+          anchorEl={emojiPickerAnchor}
+          placement="top-start"
+          style={{ zIndex: 1300 }}
+        >
+          <ClickAwayListener onClickAway={handleEmojiPickerClose}>
+            <Box>
+              <EmojiPicker onEmojiClick={handleEmojiClick} />
+            </Box>
+          </ClickAwayListener>
+        </Popper>
 
         {/* Input per il messaggio */}
         <TextField

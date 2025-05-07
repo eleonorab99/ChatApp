@@ -14,6 +14,18 @@ class WebSocketService {
   private connectionStatus: 'connected' | 'disconnected' | 'reconnecting' = 'disconnected';
   private heartbeatInterval: number | null = null;
 
+  // Controlla lo stato della connessione WebSocket
+  checkConnection() {
+    console.log('Controllo connessione WebSocket...');
+    // Se non c'è connessione ma c'è un token, riconnetti
+    if ((!this.ws || this.ws.readyState !== WebSocket.OPEN) && this.token) {
+      console.log('Connessione non attiva, tentativo di riconnessione');
+      this.reconnect(this.token);
+      return false;
+    }
+    return this.ws && this.ws.readyState === WebSocket.OPEN;
+  }
+
   // Inizializza la connessione WebSocket
   connect(token: string): void {
     this.token = token;
@@ -24,10 +36,16 @@ class WebSocketService {
     }
 
     try {
-      // Stiamo usando il token nell'URL per l'autenticazione
-      // Assicuriamoci che l'URL sia formattato correttamente
-      const wsUrl = `${this.url}?token=${encodeURIComponent(token)}`;
-      console.log('Connessione WebSocket a:', wsUrl);
+      // Log per debuggare
+      console.log('Tentativo di connessione WebSocket con token:', token ? 'presente' : 'mancante');
+      
+      // URL WebSocket
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname;
+      const port = '3000'; // Assicurati che questa porta sia corretta
+      const wsUrl = `${protocol}//${host}:${port}?token=${encodeURIComponent(token)}`;
+      
+      console.log('Connessione a:', wsUrl);
       
       this.updateConnectionStatus('reconnecting');
       this.ws = new WebSocket(wsUrl);
@@ -64,8 +82,8 @@ class WebSocketService {
   // Gestisce i messaggi in arrivo
   private onMessage(event: MessageEvent): void {
     try {
+      console.log('Messaggio WebSocket ricevuto:', event.data.substring(0, 100));
       const message = JSON.parse(event.data) as WebSocketMessage;
-      // console.log('Messaggio WebSocket ricevuto:', message.type);
       
       // Notifica tutti i listener registrati
       this.messageListeners.forEach(listener => listener(message));
@@ -96,6 +114,7 @@ class WebSocketService {
   // Aggiorna lo stato della connessione e notifica i listener
   private updateConnectionStatus(status: 'connected' | 'disconnected' | 'reconnecting'): void {
     if (this.connectionStatus !== status) {
+      console.log(`Cambio stato connessione WebSocket: ${this.connectionStatus} -> ${status}`);
       this.connectionStatus = status;
       this.notifyConnectionStatusChange(status);
     }
@@ -111,10 +130,20 @@ class WebSocketService {
     this.stopHeartbeat(); // Ferma eventuali heartbeat esistenti
     
     this.heartbeatInterval = window.setInterval(() => {
+      if (!this.checkConnection()) {
+        console.log('Heartbeat: connessione persa, tentativo di riconnessione');
+        return;
+      }
+      
       // Invia un messaggio di ping per mantenere la connessione attiva
-      this.send({
-        type: 'ping' as WebSocketMessageType,
-      });
+      try {
+        this.send({
+          type: 'ping' as WebSocketMessageType,
+        });
+        console.log('Heartbeat inviato');
+      } catch (error) {
+        console.error('Errore nell\'invio dell\'heartbeat:', error);
+      }
     }, 30000); // 30 secondi
   }
 
@@ -157,14 +186,23 @@ class WebSocketService {
 
   // Forza una riconnessione 
   reconnect(token: string): void {
+    console.log('Riconnessione forzata WebSocket');
     if (this.ws) {
-      this.ws.close();
+      try {
+        this.ws.close();
+      } catch (e) {
+        console.error('Errore nella chiusura del WebSocket:', e);
+      }
       this.ws = null;
     }
     
     this.token = token;
     this.reconnectAttempts = 0; // Resetta i tentativi
-    this.connect(token);
+    
+    // Piccolo timeout per dare tempo alla connessione precedente di chiudersi
+    setTimeout(() => {
+      this.connect(token);
+    }, 500);
   }
 
   // Invia un messaggio WebSocket
@@ -172,11 +210,14 @@ class WebSocketService {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('WebSocket non connesso, impossibile inviare il messaggio');
       this.bufferMessage(message);
+      this.checkConnection(); // Controlla e riconnetti se necessario
       return;
     }
 
     try {
-      this.ws.send(JSON.stringify(message));
+      const messageStr = JSON.stringify(message);
+      this.ws.send(messageStr);
+      console.log(`Messaggio inviato: ${message.type}`);
     } catch (error) {
       console.error('Errore nell\'invio del messaggio WebSocket:', error);
       this.bufferMessage(message);
@@ -193,7 +234,6 @@ class WebSocketService {
         message.type === WebSocketMessageType.READ_RECEIPT) {
       this.messageBuffer.push(message);
       console.log('Messaggio salvato nel buffer per invio successivo');
-      this.scheduleReconnect();
     }
   }
   
@@ -247,8 +287,13 @@ class WebSocketService {
 
   // Chiude la connessione WebSocket
   disconnect(): void {
+    console.log('Disconnessione WebSocket volontaria');
     if (this.ws) {
-      this.ws.close(1000, 'Disconnessione volontaria');
+      try {
+        this.ws.close(1000, 'Disconnessione volontaria');
+      } catch (e) {
+        console.error('Errore nella chiusura del WebSocket:', e);
+      }
       this.ws = null;
     }
     

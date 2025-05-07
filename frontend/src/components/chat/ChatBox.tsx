@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import UserList from './UserList';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
@@ -18,7 +18,14 @@ const ChatBox: React.FC = () => {
   }, [currentRecipient, fetchMessages]);
 
   return (
-    <Box sx={{ display: 'flex', width: '100%', height: '100%', position: 'relative' }}>
+    <Box sx={{ 
+      display: 'flex', 
+      width: '100%', 
+      height: 'calc(100vh - 64px)', // Altezza totale meno l'altezza della navbar
+      position: 'relative',
+      overflow: 'hidden', // Impedisce lo scroll dell'intero contenitore
+      bgcolor: 'background.default' // Sfondo generale
+    }}>
       {/* Box container per il layout principale */}
       <Box sx={{ 
         display: 'flex', 
@@ -26,29 +33,63 @@ const ChatBox: React.FC = () => {
         width: '100%',
         height: '100%'
       }}>
-        {/* Sidebar con la lista degli utenti */}
+        {/* Sidebar con la lista degli utenti - fissa */}
         <Box sx={{ 
-          height: { xs: 'auto', sm: '100%' },
-          width: { xs: '100%', sm: '33.33%', md: '25%' }
+          height: '100%',
+          width: { xs: '100%', sm: '33.33%', md: '25%' },
+          overflow: 'hidden',
+          borderRight: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper' // Sfondo bianco per la sidebar
         }}>
           <UserList />
         </Box>
         
-        {/* Area principale con i messaggi e l'input */}
+        {/* Area principale con i messaggi e l'input - layout a colonna fissa */}
         <Box sx={{ 
-          height: { xs: 'auto', sm: '100%' },
+          height: '100%',
           width: { xs: '100%', sm: '66.67%', md: '75%' },
           display: 'flex', 
           flexDirection: 'column',
-          flexGrow: 1
+          flexGrow: 1,
+          overflow: 'hidden', // Importante: impedisce lo scroll dell'intero container
+          bgcolor: 'background.paper' // Sfondo bianco per l'area chat
         }}>
-          {/* Lista dei messaggi */}
-          <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
+          {/* Header della chat - fisso */}
+          <Box sx={{ 
+            height: 'auto',
+            borderBottom: 1,
+            borderColor: 'divider',
+            backgroundColor: 'background.paper',
+            p: 2,
+            zIndex: 10 // Assicura che rimanga sopra il contenuto scrollabile
+          }}>
+            {currentRecipient && (
+              <Typography variant="h6">
+                Chat con {currentRecipient.username}
+              </Typography>
+            )}
+          </Box>
+          
+          {/* Area dei messaggi - scrollabile */}
+          <Box sx={{ 
+            flexGrow: 1, 
+            overflow: 'auto', // Questo contenitore sarà scrollabile
+            height: 'calc(100% - 140px)', // Altura totale meno header e input (approssimativa)
+            bgcolor: 'background.paper' // Sfondo bianco per l'area messaggi
+          }}>
             <MessageList />
           </Box>
           
-          {/* Input per l'invio dei messaggi */}
-          <MessageInput />
+          {/* Input per l'invio dei messaggi - fisso in basso */}
+          <Box sx={{
+            borderTop: 1,
+            borderColor: 'divider',
+            backgroundColor: 'background.paper',
+            zIndex: 10 // Assicura che rimanga sopra il contenuto scrollabile
+          }}>
+            <MessageInput />
+          </Box>
         </Box>
       </Box>
       

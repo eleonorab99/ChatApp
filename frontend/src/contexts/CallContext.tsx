@@ -1,15 +1,16 @@
-import React, { createContext, useReducer, useEffect, useContext } from 'react';
+import React, { createContext, useReducer, useEffect, useContext, useCallback, useState } from 'react';
 import { AuthContext } from './AuthContext';
 import { ChatContext } from './ChatContext';
 import { CallState } from '../types/call.types';
 import { WebSocketMessage, WebSocketMessageType } from '../types/chat.types';
 import callService from '../services/callService';
 import websocketService from '../services/websocketService';
-import { OnlineUser } from '../types/user.types';
+import { Contact } from '../types/user.types';
+import useApp from '../hooks/useApp';
 
 // Tipi di azioni per il reducer
 type CallAction =
-  | { type: 'CALL_START'; payload: { isVideo: boolean; callPartner: OnlineUser } }
+  | { type: 'CALL_START'; payload: { isVideo: boolean; callPartner: Contact } }
   | { type: 'CALL_CONNECTED' }
   | { type: 'CALL_INCOMING'; payload: { callerId: number; callerName: string; isVideo: boolean; offer: RTCSessionDescriptionInit } }
   | { type: 'CALL_ACCEPTED' }
@@ -60,7 +61,6 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         isIncomingCall: true,
         isVideoCall: action.payload.isVideo,
         error: null,
-        callPartner: onlineUsers.find(u => u.userId === action.payload.callerId) || null,
       };
     case 'CALL_ACCEPTED':
       return {
@@ -143,24 +143,28 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [state, dispatch] = useReducer(callReducer, initialState);
   const { isAuthenticated, user } = useContext(AuthContext);
   const { currentRecipient, onlineUsers } = useContext(ChatContext);
-  const [incomingCallData, setIncomingCallData] = React.useState<IncomingCallData | null>(null);
+  const [incomingCallData, setIncomingCallData] = useState<IncomingCallData | null>(null);
+  const { addNotification } = useApp();
 
   // Configura i callback per il servizio di chiamata
   useEffect(() => {
     if (isAuthenticated) {
       // Callback per stream remoto
       callService.setOnRemoteStream((stream) => {
+        console.log('CallContext: Stream remoto ricevuto');
         dispatch({ type: 'SET_REMOTE_STREAM', payload: stream });
       });
 
       // Callback per fine chiamata
       callService.setOnCallEnded(() => {
+        console.log('CallContext: Chiamata terminata dal callback');
         dispatch({ type: 'CALL_ENDED' });
         setIncomingCallData(null);
       });
 
       // Callback per inizio chiamata
       callService.setOnCallStarted(() => {
+        console.log('CallContext: Chiamata avviata dal callback');
         dispatch({ type: 'CALL_CONNECTED' });
         
         // Aggiorna local stream
@@ -184,46 +188,75 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [isAuthenticated]);
 
   // Gestisce i messaggi WebSocket relativi alle chiamate
-  const handleWebSocketMessage = (message: WebSocketMessage) => {
+  const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
+    console.log('CallContext: Messaggio WebSocket ricevuto', message.type);
+    
     if (!user) return;
 
     switch (message.type) {
       case WebSocketMessageType.CALL_OFFER:
-        if (message.recipientId === user.id && message.senderId && message.offer) {
+        if (message.recipientId === user.id && message.senderId) {
+          console.log('CallContext: Offerta di chiamata ricevuta da', message.senderId);
+          
           // Trova il nome del chiamante
           const caller = onlineUsers.find(u => u.userId === message.senderId);
           const callerName = caller?.username || message.senderUsername || 'Utente sconosciuto';
           
+          // Verifica che ci sia un'offerta valida
+          if (!message.offer) {
+            console.error('CallContext: Offerta di chiamata mancante');
+            return;
+          }
+          
+          console.log('CallContext: Offerta di chiamata è', message.offer);
+          
           // Salva i dati della chiamata in arrivo
-          setIncomingCallData({
+          const incomingData = {
             callerId: message.senderId,
             callerName,
             offer: message.offer,
             isVideo: !!message.isVideo,
-          });
+          };
+          setIncomingCallData(incomingData);
 
           // Dispatch dell'azione per la chiamata in arrivo
           dispatch({ 
             type: 'CALL_INCOMING', 
-            payload: { 
-              callerId: message.senderId,
-              callerName,
-              offer: message.offer,
-              isVideo: !!message.isVideo
-            } 
+            payload: incomingData
+          });
+          
+          // Notifica l'utente
+          addNotification({
+            type: 'info',
+            message: `Chiamata in arrivo da ${callerName}`,
+            autoHideDuration: 5000
           });
         }
         break;
       case WebSocketMessageType.CALL_END:
-        if (message.recipientId === user.id) {
+        if (message.senderId && (state.isCallActive || state.isIncomingCall)) {
+          console.log('CallContext: Fine chiamata ricevuta');
           dispatch({ type: 'CALL_ENDED' });
           setIncomingCallData(null);
+          
+          addNotification({
+            type: 'info',
+            message: 'Chiamata terminata',
+            autoHideDuration: 3000
+          });
         }
         break;
       case WebSocketMessageType.CALL_REJECT:
-        if (message.recipientId === user.id) {
+        if (message.senderId && state.isCallActive) {
+          console.log('CallContext: Rifiuto chiamata ricevuto');
           dispatch({ type: 'CALL_REJECTED' });
           setIncomingCallData(null);
+          
+          addNotification({
+            type: 'info',
+            message: 'Chiamata rifiutata',
+            autoHideDuration: 3000
+          });
         }
         break;
       default:
@@ -231,15 +264,16 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         callService.handleWebSocketMessage(message);
         break;
     }
-  };
+  }, [user, onlineUsers, state.isCallActive, state.isIncomingCall, addNotification]);
 
   // Configura il listener WebSocket
   useEffect(() => {
     if (isAuthenticated) {
+      console.log('CallContext: Configurazione listener WebSocket');
       const unsubscribe = websocketService.addMessageListener(handleWebSocketMessage);
       return unsubscribe;
     }
-  }, [isAuthenticated, user, onlineUsers]);
+  }, [isAuthenticated, handleWebSocketMessage]);
 
   // Funzione per iniziare una chiamata
   const startCall = async (withVideo = false): Promise<void> => {
@@ -248,6 +282,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    console.log(`CallContext: Avvio chiamata a ${currentRecipient.username} (video: ${withVideo})`);
+    
     try {
       dispatch({ 
         type: 'CALL_START', 
@@ -256,13 +292,36 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           callPartner: currentRecipient
         } 
       });
+      
+      // Verifica che il destinatario sia online
+      if (!currentRecipient.isOnline) {
+        addNotification({
+          type: 'warning',
+          message: `${currentRecipient.username} è offline. La chiamata potrebbe non essere ricevuta.`,
+          autoHideDuration: 5000
+        });
+      }
+      
       await callService.startCall(currentRecipient.userId, withVideo);
+      
+      addNotification({
+        type: 'info',
+        message: `Chiamata a ${currentRecipient.username} avviata`,
+        autoHideDuration: 3000
+      });
     } catch (error) {
+      console.error('CallContext: Errore durante l\'avvio della chiamata', error);
       let errorMessage = 'Errore durante l\'avvio della chiamata';
       if (error instanceof Error) {
         errorMessage = error.message;
       }
       dispatch({ type: 'CALL_ERROR', payload: errorMessage });
+      
+      addNotification({
+        type: 'error',
+        message: errorMessage,
+        autoHideDuration: 5000
+      });
     }
   };
 
@@ -273,6 +332,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    console.log('CallContext: Risposta a chiamata da', incomingCallData.callerName);
+    
     try {
       dispatch({ type: 'CALL_ACCEPTED' });
       await callService.answerCall(
@@ -280,29 +341,56 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         incomingCallData.offer,
         incomingCallData.isVideo
       );
+      
+      addNotification({
+        type: 'info',
+        message: `Chiamata con ${incomingCallData.callerName} connessa`,
+        autoHideDuration: 3000
+      });
     } catch (error) {
+      console.error('CallContext: Errore durante la risposta alla chiamata', error);
       let errorMessage = 'Errore durante la risposta alla chiamata';
       if (error instanceof Error) {
         errorMessage = error.message;
       }
       dispatch({ type: 'CALL_ERROR', payload: errorMessage });
+      
+      addNotification({
+        type: 'error',
+        message: errorMessage,
+        autoHideDuration: 5000
+      });
     }
   };
 
   // Funzione per rifiutare una chiamata in arrivo
   const rejectCall = (): void => {
     if (incomingCallData) {
+      console.log('CallContext: Rifiuto chiamata da', incomingCallData.callerName);
       callService.rejectCall(incomingCallData.callerId);
       dispatch({ type: 'CALL_REJECTED' });
       setIncomingCallData(null);
+      
+      addNotification({
+        type: 'info',
+        message: 'Chiamata rifiutata',
+        autoHideDuration: 3000
+      });
     }
   };
 
   // Funzione per terminare una chiamata attiva
   const endCall = (): void => {
+    console.log('CallContext: Termine chiamata');
     callService.endCall();
     dispatch({ type: 'CALL_ENDED' });
     setIncomingCallData(null);
+    
+    addNotification({
+      type: 'info',
+      message: 'Chiamata terminata',
+      autoHideDuration: 3000
+    });
   };
 
   // Funzione per attivare/disattivare l'audio
@@ -335,3 +423,5 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </CallContext.Provider>
   );
 };
+
+export default CallProvider;

@@ -24,11 +24,6 @@ const MessageList: React.FC = () => {
     scrollToBottom();
   }, [messages, currentRecipient]);
 
-  // Determina il titolo della chat basato su chi è il destinatario
-  const chatTitle = currentRecipient
-    ? `Chat con ${currentRecipient.username}`
-    : 'Seleziona un utente per iniziare a chattare';
-
   // Ottieni i messaggi per il destinatario corrente
   const currentMessages = currentRecipient 
     ? (messages[currentRecipient.userId] || [])
@@ -147,94 +142,51 @@ const MessageList: React.FC = () => {
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        flex: 1,
-        bgcolor: 'grey.50',
+        width: '100%',
+        p: 2,
+        backgroundColor: 'background.paper', // Sfondo bianco per l'area messaggi
+        overflowY: 'auto'
       }}
     >
-      <Box
-        sx={{
-          p: 2,
-          borderBottom: 1,
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-        }}
-      >
-        <Typography variant="h6">{chatTitle}</Typography>
-        {currentRecipient && (
-          <Typography 
-            variant="body2" 
-            color="text.secondary"
-            sx={{ 
-              display: 'flex',
-              alignItems: 'center',
-              mt: 0.5
-            }}
-          >
-            <Box
-              sx={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                bgcolor: currentRecipient.isOnline ? 'success.main' : 'error.main',
-                mr: 1
-              }}
-            />
-            {currentRecipient.isOnline 
-              ? 'Online' 
-              : currentRecipient.lastSeen 
-                ? `Ultimo accesso ${format(new Date(currentRecipient.lastSeen), 'dd/MM/yyyy HH:mm', { locale: it })}`
-                : 'Offline'}
+      {!currentRecipient ? (
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            height: '100%',
+            opacity: 0.6
+          }}
+        >
+          <Typography variant="body1" component="div" color="text.secondary" sx={{ textAlign: 'center' }}>
+            Seleziona un utente dalla lista per iniziare una conversazione
           </Typography>
-        )}
-      </Box>
-
-      <Box
-        sx={{
-          p: 2,
-          overflowY: 'auto',
-          flexGrow: 1,
-        }}
-      >
-        {!currentRecipient ? (
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              flexDirection: 'column',
-              justifyContent: 'center', 
-              alignItems: 'center', 
-              height: '100%',
-              opacity: 0.6
-            }}
-          >
-            <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center' }}>
-              Seleziona un utente dalla lista per iniziare una conversazione
-            </Typography>
-          </Box>
-        ) : loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : currentMessages.length === 0 ? (
-          <Box sx={{ textAlign: 'center', p: 4 }}>
-            <Typography variant="body1" color="text.secondary">
-              Nessun messaggio ancora. Inizia la conversazione!
-            </Typography>
-          </Box>
-        ) : (
-          Object.entries(messagesByDate).map(([date, dateMessages]) => (
-            <React.Fragment key={date}>
-              <DateDivider date={new Date(date)} />
-              {dateMessages.map((message, index) => (
-                <MessageItem 
-                  key={`${message.id}-${message.createdAt}-${index}`} 
-                  message={message} 
-                />
-              ))}
-            </React.Fragment>
-          ))
-        )}
-        <div ref={messagesEndRef} />
-      </Box>
+        </Box>
+      ) : loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+          <CircularProgress />
+        </Box>
+      ) : currentMessages.length === 0 ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+          <Typography variant="body1" component="div" color="text.secondary">
+            Nessun messaggio ancora. Inizia la conversazione!
+          </Typography>
+        </Box>
+      ) : (
+        Object.entries(messagesByDate).map(([date, dateMessages]) => (
+          <React.Fragment key={date}>
+            <DateDivider date={new Date(date)} />
+            {dateMessages.map((message, index) => (
+              <MessageItem 
+                key={`${message.id}-${message.createdAt}-${index}`} 
+                message={message} 
+              />
+            ))}
+          </React.Fragment>
+        ))
+      )}
+      <div ref={messagesEndRef} />
     </Box>
   );
 };

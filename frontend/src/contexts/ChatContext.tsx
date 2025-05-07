@@ -442,12 +442,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [isAuthenticated, isInitialized]);
 
   // Carica i contatti dal server una sola volta all'inizializzazione
+  // MODIFICATO per risolvere il loop infinito: rimosso fetchAllContacts dalle dipendenze
   useEffect(() => {
     if (isAuthenticated && isInitialized && !contactsInitialized.current) {
       contactsInitialized.current = true;
       fetchAllContacts();
     }
-  }, [isAuthenticated, isInitialized]);
+  }, [isAuthenticated, isInitialized]); // Rimosso fetchAllContacts dalle dipendenze
 
   // Salva i contatti nel localStorage quando cambiano
   useEffect(() => {
@@ -608,13 +609,28 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [isAuthenticated, handleWebSocketMessage]);
 
+  // Aggiungi un nuovo useEffect per gestire la connessione iniziale
+  useEffect(() => {
+    if (isAuthenticated && !websocketService.isConnected()) {
+      console.log('Connessione WebSocket iniziale');
+      const token = localStorage.getItem('token');
+      if (token) {
+        websocketService.reconnect(token);
+      }
+    }
+  }, [isAuthenticated]);
+
   // Funzione per riconnettersi a WebSocket
   const reconnectWebSocket = useCallback(() => {
+    console.log('Tentativo di riconnessione WebSocket da ChatContext');
     dispatch({ type: 'SET_CONNECTION_STATUS', payload: 'reconnecting' });
     
     const token = localStorage.getItem('token');
     if (token) {
+      // Forza una riconnessione completa
       websocketService.reconnect(token);
+    } else {
+      console.error('Token mancante per la riconnessione WebSocket');
     }
   }, []);
 
@@ -702,11 +718,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchAllContacts = useCallback(async () => {
     if (!isAuthenticated) return;
     
+    console.log('Recupero contatti...');
+    dispatch({ type: 'FETCH_MESSAGES_START' }); // Mostra loader
+    
     try {
       // Ottieni i contatti dal servizio
       const contacts = await chatService.getContacts();
       
       if (contacts && contacts.length > 0) {
+        console.log('Contatti ricevuti:', contacts.length);
         // Aggiorna con i dati salvati localmente
         const contactsWithLocalData = contacts.map(contact => {
           const existingContact = state.allContacts.find(c => c.userId === contact.userId);
@@ -728,7 +748,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         
         dispatch({ type: 'SET_ALL_CONTACTS', payload: contactsWithLocalData });
-      } else if (state.allContacts.length === 0) {
+      } else {
+        console.log('Nessun contatto ricevuto, uso contatto di esempio');
         // Se non ci sono contatti dal server e non abbiamo contatti locali,
         // creiamo un contatto di esempio
         const exampleContacts: Contact[] = [
@@ -748,6 +769,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Se c'è un errore e non abbiamo contatti, aggiungiamo un contatto di esempio
       if (state.allContacts.length === 0) {
+        console.log('Uso contatto di esempio dopo errore');
         const exampleContacts: Contact[] = [
           {
             userId: 1001,
@@ -760,115 +782,145 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         dispatch({ type: 'SET_ALL_CONTACTS', payload: exampleContacts });
       }
+    } finally {
+      dispatch({ type: 'FETCH_MESSAGES_FAILURE', payload: '' }); // Nasconde loader
     }
-  }, [isAuthenticated, state.allContacts, state.unreadCounts]);
+  }, [isAuthenticated]); // Rimuoviamo state.allContacts e state.unreadCounts dalle dipendenze
 
   // Funzione per recuperare i messaggi
-  const fetchMessages = useCallback(async () => {
-    if (!isAuthenticated || !state.currentRecipient) {
-      // Non carichiamo messaggi se non c'è un destinatario selezionato
-      return;
-    }
+ 
+const fetchMessages = useCallback(async () => {
+  if (!isAuthenticated || !state.currentRecipient) {
+    // Non carichiamo messaggi se non c'è un destinatario selezionato
+    return;
+  }
+  
+  // Verifica se stiamo già caricando i messaggi per questo utente
+  if (state.loading) {
+    console.log('Caricamento messaggi già in corso, ignoro');
+    return;
+  }
+  
+  console.log(`Inizio caricamento messaggi per ${state.currentRecipient.username}`);
+  dispatch({ type: 'FETCH_MESSAGES_START' });
+  
+  try {
+    // Prima verifichiamo se abbiamo già i messaggi in cache
+    const cachedMessages = state.messages[state.currentRecipient.userId];
     
-    dispatch({ type: 'FETCH_MESSAGES_START' });
-    
-    try {
-      // Prima verifichiamo se abbiamo già i messaggi in cache
-      const cachedMessages = state.messages[state.currentRecipient.userId];
-      
-      // Se non abbiamo messaggi in cache, li carichiamo dal server
-      if (!cachedMessages || cachedMessages.length === 0) {
-        try {
-          // Carica messaggi solo con il destinatario selezionato
-          const messages = await chatService.getMessages(state.currentRecipient.userId);
+    // Se non abbiamo messaggi in cache, li carichiamo dal server
+    if (!cachedMessages || cachedMessages.length === 0) {
+      try {
+        // Carica messaggi solo con il destinatario selezionato
+        console.log(`Caricamento messaggi dal server per ${state.currentRecipient.userId}`);
+        const messages = await chatService.getMessages(state.currentRecipient.userId);
+        console.log(`Ricevuti ${messages.length} messaggi`);
+        
+        // Se il server risponde con un array vuoto o errore, creiamo un messaggio di esempio
+        if (messages.length === 0 && state.currentRecipient.userId === 1001) {
+          // Questo è un contatto di esempio, quindi creiamo un messaggio di esempio
+          console.log('Creazione messaggio di esempio per contatto di esempio');
+          const exampleMessage: Message = {
+            id: Date.now(),
+            content: "Questo è un messaggio di esempio. Puoi iniziare a chattare con utenti reali selezionandoli dalla lista contatti.",
+            senderId: 1001,
+            receiverId: user?.id || 0,
+            fileUrl: null,
+            fileSize: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            sender: {
+              id: 1001,
+              username: "Esempio Utente",
+              email: "esempio@chatapp.com"
+            },
+            isRead: true
+          };
           
-          // Se il server risponde con un array vuoto o errore, creiamo un messaggio di esempio
-          if (messages.length === 0 && state.currentRecipient.userId === 1001) {
-            // Questo è un contatto di esempio, quindi creiamo un messaggio di esempio
-            const exampleMessage: Message = {
-              id: Date.now(),
-              content: "Questo è un messaggio di esempio. Puoi iniziare a chattare con utenti reali selezionandoli dalla lista contatti.",
-              senderId: 1001,
-              receiverId: user?.id || 0,
-              fileUrl: null,
-              fileSize: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              sender: {
-                id: 1001,
-                username: "Esempio Utente",
-                email: "esempio@chatapp.com"
-              },
-              isRead: true
-            };
-            
-            // Aggiorna i messaggi con il messaggio di esempio
-            dispatch({ 
-              type: 'FETCH_MESSAGES_SUCCESS', 
-              payload: { 
-                userId: state.currentRecipient.userId, 
-                messages: [exampleMessage] 
-              } 
-            });
-          } else {
-            // Resetta il contatore dei messaggi non letti
-            dispatch({ type: 'RESET_UNREAD', payload: state.currentRecipient.userId });
-            
-            // Aggiorna i messaggi
-            dispatch({ 
-              type: 'FETCH_MESSAGES_SUCCESS', 
-              payload: { 
-                userId: state.currentRecipient.userId, 
-                messages 
-              } 
-            });
-          }
-        } catch (error) {
-          console.error('Errore durante il recupero dei messaggi:', error);
+          // Aggiorna i messaggi con il messaggio di esempio
+          dispatch({ 
+            type: 'FETCH_MESSAGES_SUCCESS', 
+            payload: { 
+              userId: state.currentRecipient.userId, 
+              messages: [exampleMessage] 
+            } 
+          });
+        } else {
+          // Resetta il contatore dei messaggi non letti
+          dispatch({ type: 'RESET_UNREAD', payload: state.currentRecipient.userId });
           
-          // Se c'è un errore con l'API, mostriamo un messaggio di esempio per il contatto di esempio
-          if (state.currentRecipient.userId === 1001) {
-            const exampleMessage: Message = {
-              id: Date.now(),
-              content: "Questo è un messaggio di esempio. Puoi iniziare a chattare con utenti reali selezionandoli dalla lista contatti.",
-              senderId: 1001,
-              receiverId: user?.id || 0,
-              fileUrl: null,
-              fileSize: null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              sender: {
-                id: 1001,
-                username: "Esempio Utente",
-                email: "esempio@chatapp.com"
-              },
-              isRead: true
-            };
-            
-            dispatch({ 
-              type: 'FETCH_MESSAGES_SUCCESS', 
-              payload: { 
-                userId: state.currentRecipient.userId, 
-                messages: [exampleMessage] 
-              } 
-            });
-          } else {
-            throw error;
-          }
+          // Aggiorna i messaggi
+          dispatch({ 
+            type: 'FETCH_MESSAGES_SUCCESS', 
+            payload: { 
+              userId: state.currentRecipient.userId, 
+              messages: messages || [] // Assicurati di passare un array anche se vuoto
+            } 
+          });
         }
-      } else {
-        // Se abbiamo già i messaggi, resettiamo solo il contatore
-        dispatch({ type: 'RESET_UNREAD', payload: state.currentRecipient.userId });
+      } catch (error) {
+        console.error('Errore durante il recupero dei messaggi:', error);
+        
+        // Se c'è un errore con l'API, mostriamo un messaggio di esempio per il contatto di esempio
+        if (state.currentRecipient.userId === 1001) {
+          const exampleMessage: Message = {
+            id: Date.now(),
+            content: "Questo è un messaggio di esempio. Puoi iniziare a chattare con utenti reali selezionandoli dalla lista contatti.",
+            senderId: 1001,
+            receiverId: user?.id || 0,
+            fileUrl: null,
+            fileSize: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            sender: {
+              id: 1001,
+              username: "Esempio Utente",
+              email: "esempio@chatapp.com"
+            },
+            isRead: true
+          };
+          
+          dispatch({ 
+            type: 'FETCH_MESSAGES_SUCCESS', 
+            payload: { 
+              userId: state.currentRecipient.userId, 
+              messages: [exampleMessage] 
+            } 
+          });
+        } else {
+          // Anche in caso di errore, terminiamo lo stato di caricamento
+          dispatch({ 
+            type: 'FETCH_MESSAGES_SUCCESS', 
+            payload: { 
+              userId: state.currentRecipient.userId, 
+              messages: [] 
+            } 
+          });
+        }
       }
-    } catch (error) {
-      console.error('Errore durante il recupero dei messaggi:', error);
-      let errorMessage = 'Errore durante il recupero dei messaggi';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      dispatch({ type: 'FETCH_MESSAGES_FAILURE', payload: errorMessage });
+    } else {
+      console.log(`Uso ${cachedMessages.length} messaggi dalla cache`);
+      // Se abbiamo già i messaggi, resettiamo solo il contatore e lo stato di caricamento
+      dispatch({ type: 'RESET_UNREAD', payload: state.currentRecipient.userId });
+      // Assicuriamoci che il caricamento sia completato impostando il successo
+      dispatch({ 
+        type: 'FETCH_MESSAGES_SUCCESS', 
+        payload: { 
+          userId: state.currentRecipient.userId, 
+          messages: cachedMessages 
+        } 
+      });
     }
-  }, [isAuthenticated, state.currentRecipient, state.messages, user]);
+  } catch (error) {
+    console.error('Errore durante il recupero dei messaggi:', error);
+    let errorMessage = 'Errore durante il recupero dei messaggi';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    // Termina lo stato di caricamento anche in caso di errore
+    dispatch({ type: 'FETCH_MESSAGES_FAILURE', payload: errorMessage });
+  }
+}, [isAuthenticated, state.currentRecipient, state.loading, user]); // Aggiungi state.loading alle dipendenze
 
   // Effettua il fetch dei messaggi quando cambia il destinatario
   useEffect(() => {

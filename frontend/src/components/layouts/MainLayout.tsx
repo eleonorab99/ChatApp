@@ -69,7 +69,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   return (
     <>
-      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh',  }}>
         {/* Componente per mostrare lo stato della connessione di rete */}
         <NetworkStatus />
         
@@ -94,7 +94,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 </Tooltip>
                 
                 <Tooltip title="Impostazioni">
-                  <IconButton color="inherit" sx={{ mr: 1 }}>
+                  <IconButton color="inherit" sx={{ mr: 1 }} onClick={() => navigate('/settings')}>
                     <Settings />
                   </IconButton>
                 </Tooltip>

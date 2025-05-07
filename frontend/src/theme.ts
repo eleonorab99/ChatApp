@@ -6,20 +6,20 @@ const themeOptions: ThemeOptions = {
   palette: {
     mode: 'light',
     primary: {
-      main: '#075e54', // Colore principale ispirato a WhatsApp
-      light: '#128c7e',
-      dark: '#054c44',
-      contrastText: '#fff',
+      main: '#2a2a2a', // Colore principale ispirato a WhatsApp ffd700
+      light: '#ffd700', //messaggi inviati
+      dark: '#2a2a2a', //bordo riquadri login e register
+      contrastText: '#ffd700',//icone barra superiore
     },
     secondary: {
-      main: '#128c7e',
-      light: '#25d366',
-      dark: '#075e54',
+      main: '#2a2a2a',//icone lista contatti
+      light: '#2a2a2a',
+      dark: '#fff',
       contrastText: '#fff',
     },
     background: {
-      default: '#f0f2f5',
-      paper: '#ffffff',
+      default: '#ffd700',//icona lista contatti (interno)
+      paper: '#fff',
     },
   },
   typography: {
@@ -39,9 +39,7 @@ const themeOptions: ThemeOptions = {
     },
     MuiPaper: {
       styleOverrides: {
-        rounded: {
-          borderRadius: 8,
-        },
+
       },
     },
     MuiCard: {

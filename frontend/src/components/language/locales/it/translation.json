@@ -1,0 +1,40 @@
+{
+    "app": {
+      "title": "Chat App",
+      "settings": "Impostazioni"
+    },
+    "settings": {
+      "language": "Lingua",
+      "theme": "Tema",
+      "notifications": "Notifiche",
+      "privacy": "Privacy",
+      "assistance": "Assistenza"
+    },
+    "language": {
+      "title": "Impostazioni Lingua"
+    },
+    "privacy": {
+      "title": "Privacy e Sicurezza",
+      "description": "Modifica le impostazioni relative a privacy e sicurezza."
+    },
+    "assistance": {
+      "title": "Assistenza",
+      "description": "Contatta il supporto o consulta le FAQ."
+    },
+    "navbar": {
+      "search": "Cerca...",
+      "toggleLight": "Passa al tema chiaro",
+      "toggleDark": "Passa al tema scuro"
+    },
+    "backToDashboard": "Torna alla Dashboard",
+    "messageInput": {
+      "caricamento": "Caricamento in corso...",
+      "allega": "Allega file",
+      "scrivi": "Scrivi un messaggio...",
+      "invia": "Invia messaggio",
+      "utenti": "Utenti Online",
+      "nessunUtente": "Nessun altro utente online",
+      "chatGlobale": "Chat globale"
+    }
+    
+  }

@@ -15,11 +15,13 @@ import { AccountCircle, Forum } from '@mui/icons-material';
 import useChat from '../../hooks/useChat';
 import useAuth from '../../hooks/useAuth';
 import { OnlineUser } from '../../types/chat.types';
+import { useTranslation } from 'react-i18next';
 
 // Componente per la lista degli utenti online
 const UserList: React.FC = () => {
   const { onlineUsers, currentRecipient, setCurrentRecipient, unreadCounts } = useChat();
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   // Seleziona un utente come destinatario
   const handleSelectUser = (selectedUser: OnlineUser) => {
@@ -57,7 +59,7 @@ const UserList: React.FC = () => {
           backgroundColor: 'grey.100',
         }}
       >
-        Utenti Online
+        {t('messageInput.utenti')}
       </Typography>
 
       <List
@@ -93,7 +95,7 @@ const UserList: React.FC = () => {
         {filteredUsers.length === 0 ? (
           <Box sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              Nessun altro utente online
+              {t('messageInput.nessunUtente')}
             </Typography>
           </Box>
         ) : (

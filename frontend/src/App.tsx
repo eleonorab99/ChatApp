@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './contexts/AppProvider';
-import Login from './components/auth/Login';
+import Login from './components/auth/Login/Login';
 import Register from './components/auth/Register/Register';
 import MainLayout from './components/layouts/MainLayout';
 import ChatBox from './components/chat/ChatBox';
@@ -9,6 +9,7 @@ import DebugPage from './components/debug/DebugPage';
 import useAuth from './hooks/useAuth';
 import RouteLogger from './components/debug/RouteLogger';
 import { CircularProgress, Box } from '@mui/material';
+import PaginaImpostazioni from './components/common/Setting/Settings';
 
 // Componente di caricamento
 const LoadingFallback = () => (
@@ -76,6 +77,16 @@ const AppRoutes = () => {
           path="/debug" 
           element={
             <DebugPage />
+          } 
+        />
+        <Route 
+          path="/settings" 
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <PaginaImpostazioni />
+              </MainLayout>
+            </ProtectedRoute>
           } 
         />
         <Route path="*" element={<Navigate to="/" replace />} />

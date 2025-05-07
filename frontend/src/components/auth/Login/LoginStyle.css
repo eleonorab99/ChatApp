@@ -1,21 +1,3 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-html {
-    height: 100%;
-}
-
-body {
-    min-height: 100%;
-    background: url('image1.jpg') no-repeat center center fixed;
-    background-size: cover;
-    margin: 0;
-    padding: 0;
-}
-
 .container {
     position: relative;
     min-height: 100vh;
@@ -34,8 +16,6 @@ body {
     bottom: 0;
     z-index: 0;
   }
-
-
   .boxWrapper {
     position: relative;
     z-index: 1;
@@ -44,6 +24,13 @@ body {
     align-items: center;
     justify-content: center;
     min-height: 100vh;
+  }
+
+  .title {
+    margin-bottom: 32px;
+    font-weight: bold;
+    color: #000000;
+    font-size: 45px;
   }
   
   .paper {
@@ -56,23 +43,10 @@ body {
     background-color: #FFD700;
     color: #000000;
   }
-  
-  .title {
-    margin-bottom: 32px;
-    font-weight: bold;
-    color: #000000;
-  }
-  
-  .subtitle {
-    margin-bottom: 24px;
-    color: #000000;
-  }
-  
   .form {
     margin-top: 8px;
     width: 100%;
   }
-  
   .textField {
     margin-bottom: 16px;
   }
@@ -84,8 +58,6 @@ body {
   .textField input {
     background-color: #FFFFFF;
   }
-  
-  
   .submitButton {
     margin-top: 16px;
     margin-bottom: 16px;

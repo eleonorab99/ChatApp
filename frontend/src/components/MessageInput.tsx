@@ -16,6 +16,7 @@ import {
 } from '@mui/icons-material';
 import useChat from '../hooks/useChat';
 import useCall from '../hooks/useCall';
+import { useTranslation } from 'react-i18next';
 
 // Componente per l'input di messaggi
 const MessageInput: React.FC = () => {
@@ -24,6 +25,7 @@ const MessageInput: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { sendMessage, sendFileMessage, currentRecipient } = useChat();
   const { startCall } = useCall();
+  const { t } = useTranslation();
 
   // Gestisce l'invio del messaggio
   const handleSendMessage = () => {
@@ -103,7 +105,7 @@ const MessageInput: React.FC = () => {
           disabled={loading}
         />
         <label htmlFor="file-upload">
-          <Tooltip title={loading ? 'Caricamento in corso...' : 'Allega file'}>
+          <Tooltip title={loading ? t('messageInput.caricamento') : t('messageInput.allega')}>
             <span>
               <IconButton 
                 color="primary" 
@@ -120,7 +122,7 @@ const MessageInput: React.FC = () => {
         {/* Input per il messaggio */}
         <TextField
           fullWidth
-          placeholder="Scrivi un messaggio..."
+          placeholder={t('messageInput.scrivi')}
           variant="outlined"
           size="small"
           value={message}

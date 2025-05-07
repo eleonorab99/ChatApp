@@ -17,9 +17,10 @@ import {
   VisibilityOff,
   Login as LoginIcon
 } from '@mui/icons-material';
-import useAuth from '../../hooks/useAuth';
-import useApp from '../../hooks/useApp';
-import LoadingButton from '../common/LoadingButton';
+import useAuth from '../../../hooks/useAuth';
+import useApp from '../../../hooks/useApp';
+import LoadingButton from '../../common/LoadingButton';
+import './LoginStyle.css';
 
 // Componente per il login
 const Login: React.FC = () => {
@@ -78,40 +79,14 @@ const Login: React.FC = () => {
   };
 
   return (
-    <Container component="main" maxWidth="xs">
-      <Box
-        sx={{
-          marginTop: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}
-      >
+    <Container component="main" maxWidth="xs" className='container'>
+      <Box className= "boxWrapper">
         <Paper
-          elevation={3}
-          sx={{
-            padding: 4,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            borderRadius: 2,
-            width: '100%',
-          }}
-        >
-          <Box
-            sx={{
-              backgroundColor: 'primary.main',
-              borderRadius: '50%',
-              padding: 1,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              mb: 2,
-            }}
-          >
-            <LockOutlinedIcon sx={{ color: 'white' }} />
+          elevation={3} className='paper'>
+          <Box className='title'>
+            Chat App
           </Box>
-          <Typography component="h1" variant="h5" sx={{ mb: 3 }}>
+          <Typography component="h1" variant="h4" sx={{ mb: 3 }}>
             Accedi
           </Typography>
           
@@ -134,7 +109,7 @@ const Login: React.FC = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyPress={handleKeyPress}
-              sx={{ mb: 2 }}
+              className='textField'
               error={!!error && !email}
             />
             <TextField
@@ -150,7 +125,7 @@ const Login: React.FC = () => {
               onChange={(e) => setPassword(e.target.value)}
               onKeyPress={handleKeyPress}
               error={!!error && !password}
-              sx={{ mb: 3 }}
+              className='textField'
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -172,7 +147,7 @@ const Login: React.FC = () => {
               loading={loading}
               loadingPosition="start"
               startIcon={<LoginIcon />}
-              sx={{ mt: 2, mb: 2 }}
+              className='submitButton'
             >
               Accedi
             </LoadingButton>
@@ -180,7 +155,7 @@ const Login: React.FC = () => {
               <Button
                 onClick={navigateToRegister}
                 color="primary"
-                sx={{ textTransform: 'none' }}
+                
               >
                 Non hai un account? Registrati
               </Button>

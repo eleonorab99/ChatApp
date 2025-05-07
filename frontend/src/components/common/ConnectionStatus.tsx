@@ -19,7 +19,7 @@ const ConnectionStatus: React.FC = () => {
   switch (connectionStatus) {
     case 'connected':
       icon = <ConnectedIcon />;
-      color = 'success.main';
+      color = '#ffd700';
       tooltipText = 'Connesso al server';
       break;
     case 'disconnected':
@@ -34,7 +34,7 @@ const ConnectionStatus: React.FC = () => {
       break;
     default:
       icon = <ConnectedIcon />;
-      color = 'success.main';
+      color = '#ffd700';
       tooltipText = 'Connesso al server';
   }
 
@@ -53,7 +53,7 @@ const ConnectionStatus: React.FC = () => {
           onClick={handleClick}
           disabled={connectionStatus === 'connected' || connectionStatus === 'reconnecting'}
           sx={{ 
-            color, 
+            color,
             p: 0.5,
             '& .rotating-icon': {
               animation: 'spin 2s linear infinite',

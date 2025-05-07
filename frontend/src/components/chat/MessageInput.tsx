@@ -15,6 +15,7 @@ import {
 } from '@mui/icons-material';
 import useChat from '../../hooks/useChat';
 import useCall from '../../hooks/useCall';
+import { useTranslation } from'react-i18next';
 
 // Componente per l'input di messaggi
 const MessageInput: React.FC = () => {
@@ -22,6 +23,7 @@ const MessageInput: React.FC = () => {
   const [fileInputKey, setFileInputKey] = useState(Date.now());
   const { sendMessage, sendFileMessage, currentRecipient } = useChat();
   const { startCall } = useCall();
+  const { t } = useTranslation();
 
   // Gestisce l'invio del messaggio
   const handleSendMessage = () => {
@@ -104,7 +106,7 @@ const MessageInput: React.FC = () => {
               component="span"
               aria-label="allega file"
             >
-              <AttachFileIcon />
+              📎
             </IconButton>
           </Tooltip>
         </label>
@@ -112,7 +114,7 @@ const MessageInput: React.FC = () => {
         {/* Input per il messaggio */}
         <TextField
           fullWidth
-          placeholder="Scrivi un messaggio..."
+          placeholder={t('messageInput.scrivi')}
           variant="outlined"
           size="small"
           value={message}

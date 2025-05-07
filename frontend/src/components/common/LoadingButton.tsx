@@ -29,6 +29,9 @@ const LoadingButton: React.FC<LoadingButtonProps> = ({
       startIcon={showStartIcon ? startIcon : undefined}
       sx={{
         position: 'relative',
+        '& .MuiCircularProgress-root': {
+          color: '#ffd700'
+        },
         ...rest.sx
       }}
     >

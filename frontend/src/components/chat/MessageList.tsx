@@ -29,10 +29,10 @@ const MessageList: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Determina il tipo di chat (rimuovi la logica per la chat globale)
+  // Determina il tipo di chat (globale o privata)
   const chatTitle = currentRecipient
     ? `Chat con ${currentRecipient.username}`
-    : ""; // Rimuovi il titolo per la chat globale
+    : "Chat Globale";
 
   // Componente per un singolo messaggio
   const MessageItem: React.FC<{ message: Message }> = ({ message }) => {

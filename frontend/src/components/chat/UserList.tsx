@@ -11,7 +11,7 @@ import {
   Badge,
   Divider,
 } from "@mui/material";
-import { AccountCircle, Forum } from "@mui/icons-material";
+import { AccountCircle } from "@mui/icons-material";
 import useChat from "../../hooks/useChat";
 import useAuth from "../../hooks/useAuth";
 import { OnlineUser } from "../../types/chat.types";

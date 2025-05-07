@@ -218,9 +218,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({
   // Funzione per inviare un messaggio
   const sendMessage = useCallback(
     (content: string) => {
-      if (!content.trim() || !state.currentRecipient) return; // Rimuovi la gestione per destinatario nullo
+      if (!content.trim()) return;
 
-      websocketService.sendChatMessage(content, state.currentRecipient.userId);
+      websocketService.sendChatMessage(content, state.currentRecipient?.userId);
     },
     [state.currentRecipient]
   );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   Dialog,
   DialogTitle,
@@ -7,13 +7,19 @@ import {
   Button,
   Typography,
   Box,
-} from '@mui/material';
-import { Call, CallEnd, Videocam } from '@mui/icons-material';
-import useCall from '../../hooks/useCall';
+} from "@mui/material";
+import { Call, CallEnd, Videocam } from "@mui/icons-material";
+import useCall from "../../hooks/useCall";
 
 // Componente per mostrare una finestra di dialogo per chiamate in arrivo
 const IncomingCallDialog: React.FC = () => {
-  const { isIncomingCall, isVideoCall, incomingCallData, answerCall, rejectCall } = useCall();
+  const {
+    isIncomingCall,
+    isVideoCall,
+    incomingCallData,
+    answerCall,
+    rejectCall,
+  } = useCall();
 
   if (!isIncomingCall || !incomingCallData) {
     return null;
@@ -24,47 +30,54 @@ const IncomingCallDialog: React.FC = () => {
       open={isIncomingCall}
       aria-labelledby="incoming-call-dialog-title"
       sx={{
-        '& .MuiDialog-paper': {
+        "& .MuiDialog-paper": {
           borderRadius: 2,
-          width: '100%',
+          width: "100%",
           maxWidth: 400,
         },
       }}
     >
-      <DialogTitle id="incoming-call-dialog-title" sx={{ textAlign: 'center' }}>
+      <DialogTitle id="incoming-call-dialog-title" sx={{ textAlign: "center" }}>
         Chiamata in arrivo
       </DialogTitle>
-      
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2 }}>
+
+      <DialogContent
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          py: 2,
+        }}
+      >
         <Box
           sx={{
             width: 80,
             height: 80,
-            borderRadius: '50%',
-            bgcolor: 'primary.main',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
+            borderRadius: "50%",
+            bgcolor: "primary.main",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
             mb: 2,
           }}
         >
           {isVideoCall ? (
-            <Videocam sx={{ fontSize: 40, color: 'white' }} />
+            <Videocam sx={{ fontSize: 40, color: "white" }} />
           ) : (
-            <Call sx={{ fontSize: 40, color: 'white' }} />
+            <Call sx={{ fontSize: 40, color: "white" }} />
           )}
         </Box>
-        
+
         <Typography variant="h6" component="div" gutterBottom>
           {incomingCallData.callerName}
         </Typography>
-        
+
         <Typography variant="body2" color="text.secondary">
-          {isVideoCall ? 'sta avviando una videochiamata' : 'sta chiamando'}
+          {isVideoCall ? "sta avviando una videochiamata" : "sta chiamando"}
         </Typography>
       </DialogContent>
-      
-      <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 3 }}>
+
+      <DialogActions sx={{ justifyContent: "space-between", px: 3, pb: 3 }}>
         <Button
           variant="contained"
           color="error"
@@ -74,7 +87,7 @@ const IncomingCallDialog: React.FC = () => {
         >
           Rifiuta
         </Button>
-        
+
         <Button
           variant="contained"
           color="success"

@@ -1,14 +1,17 @@
-import { useContext } from 'react';
-import { ChatContext } from '../contexts/ChatContext';
+import { useContext } from "react";
+import { ChatContext } from "../contexts/ChatContext";
 
 // Hook personalizzato per utilizzare il contesto della chat
 export const useChat = () => {
+  const { onlineUsers } = useChat();
   const context = useContext(ChatContext);
-  
+
   if (context === undefined) {
-    throw new Error('useChat deve essere utilizzato all\'interno di un ChatProvider');
+    throw new Error(
+      "useChat deve essere utilizzato all'interno di un ChatProvider"
+    );
   }
-  
+
   return context;
 };
 

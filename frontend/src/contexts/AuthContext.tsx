@@ -107,12 +107,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Token non valido, pulisci il localStorage
             localStorage.removeItem('token');
             localStorage.removeItem('user');
+            localStorage.removeItem('userId'); // Rimuovi anche l'ID utente
             dispatch({ type: 'AUTH_CHECK_COMPLETE' });
           }
         } catch (error) {
           console.error('Errore nel parsing dell\'utente da localStorage:', error);
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          localStorage.removeItem('userId'); // Rimuovi anche l'ID utente
           dispatch({ type: 'AUTH_CHECK_COMPLETE' });
         }
       } else {
@@ -130,6 +132,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await authService.login(data);
       authService.saveAuth(response);
+      
+      // IMPORTANTE: Salva l'ID utente nel localStorage per le chiamate
+      if (response.user && response.user.id) {
+        localStorage.setItem('userId', response.user.id.toString());
+        console.log('ID utente salvato nel localStorage:', response.user.id);
+      }
+      
       dispatch({
         type: 'AUTH_SUCCESS',
         payload: { user: response.user, token: response.token },
@@ -153,6 +162,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await authService.register(data);
       authService.saveAuth(response);
+      
+      // IMPORTANTE: Salva l'ID utente nel localStorage per le chiamate
+      if (response.user && response.user.id) {
+        localStorage.setItem('userId', response.user.id.toString());
+        console.log('ID utente salvato nel localStorage:', response.user.id);
+      }
+      
       dispatch({
         type: 'AUTH_SUCCESS',
         payload: { user: response.user, token: response.token },
@@ -175,6 +191,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // Disconnetti WebSocket
       websocketService.disconnect();
+      
+      // Rimuovi l'ID utente dal localStorage
+      localStorage.removeItem('userId');
       
       await authService.logout();
     } catch (error) {

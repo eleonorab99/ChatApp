@@ -1,4 +1,4 @@
-import React, { createContext, useReducer, useEffect, useContext, useCallback, useState } from 'react';
+import React, { createContext, useReducer, useEffect, useContext, useCallback, useState, useRef } from 'react';
 import { AuthContext } from './AuthContext';
 import { ChatContext } from './ChatContext';
 import { CallState } from '../types/call.types';
@@ -145,6 +145,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { currentRecipient, onlineUsers } = useContext(ChatContext);
   const [incomingCallData, setIncomingCallData] = useState<IncomingCallData | null>(null);
   const { addNotification } = useApp();
+  
+  // Riferimento per memorizzare il listener WebSocket
+  const listenerRef = useRef<((message: WebSocketMessage) => void) | null>(null);
 
   // Configura i callback per il servizio di chiamata
   useEffect(() => {
@@ -195,6 +198,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     switch (message.type) {
       case WebSocketMessageType.CALL_OFFER:
+        // Verifica che il messaggio sia diretto a noi
         if (message.recipientId === user.id && message.senderId) {
           console.log('CallContext: Offerta di chiamata ricevuta da', message.senderId);
           
@@ -208,7 +212,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
           }
           
-          console.log('CallContext: Offerta di chiamata è', message.offer);
+          console.log('CallContext: Offerta di chiamata ricevuta con successo', {
+            callerId: message.senderId,
+            callerName,
+            isVideo: !!message.isVideo
+          });
           
           // Salva i dati della chiamata in arrivo
           const incomingData = {
@@ -234,7 +242,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         break;
       case WebSocketMessageType.CALL_END:
-        if (message.senderId && (state.isCallActive || state.isIncomingCall)) {
+        if (state.isCallActive || state.isIncomingCall) {
           console.log('CallContext: Fine chiamata ricevuta');
           dispatch({ type: 'CALL_ENDED' });
           setIncomingCallData(null);
@@ -247,7 +255,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         break;
       case WebSocketMessageType.CALL_REJECT:
-        if (message.senderId && state.isCallActive) {
+        if (state.isCallActive) {
           console.log('CallContext: Rifiuto chiamata ricevuto');
           dispatch({ type: 'CALL_REJECTED' });
           setIncomingCallData(null);
@@ -266,12 +274,25 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user, onlineUsers, state.isCallActive, state.isIncomingCall, addNotification]);
 
-  // Configura il listener WebSocket
+  // Registriamo il listener WebSocket solo una volta
   useEffect(() => {
-    if (isAuthenticated) {
-      console.log('CallContext: Configurazione listener WebSocket');
-      const unsubscribe = websocketService.addMessageListener(handleWebSocketMessage);
-      return unsubscribe;
+    if (isAuthenticated && !listenerRef.current) {
+      console.log('CallContext: Configurazione listener WebSocket (registrazione unica)');
+      
+      // Creiamo il listener
+      listenerRef.current = handleWebSocketMessage;
+      
+      // Registriamo il listener
+      const unsubscribe = websocketService.addMessageListener(listenerRef.current);
+      
+      // Cleanup
+      return () => {
+        if (listenerRef.current) {
+          console.log('CallContext: Pulizia listener WebSocket finale');
+          unsubscribe();
+          listenerRef.current = null;
+        }
+      };
     }
   }, [isAuthenticated, handleWebSocketMessage]);
 
@@ -300,6 +321,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           message: `${currentRecipient.username} è offline. La chiamata potrebbe non essere ricevuta.`,
           autoHideDuration: 5000
         });
+      }
+      
+      // IMPORTANTE: Assicurati che l'ID utente sia nel localStorage
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        console.log('CallContext: ID utente mancante nel localStorage, usando ID da contesto:', user?.id);
+        if (user?.id) {
+          localStorage.setItem('userId', user.id.toString());
+        }
       }
       
       await callService.startCall(currentRecipient.userId, withVideo);
@@ -336,6 +366,16 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     try {
       dispatch({ type: 'CALL_ACCEPTED' });
+      
+      // IMPORTANTE: Assicurati che l'ID utente sia nel localStorage
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        console.log('CallContext: ID utente mancante nel localStorage, usando ID da contesto:', user?.id);
+        if (user?.id) {
+          localStorage.setItem('userId', user.id.toString());
+        }
+      }
+      
       await callService.answerCall(
         incomingCallData.callerId,
         incomingCallData.offer,

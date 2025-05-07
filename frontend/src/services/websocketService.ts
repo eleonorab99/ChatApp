@@ -5,7 +5,7 @@ class WebSocketService {
   private ws: WebSocket | null = null;
   private messageListeners: ((message: WebSocketMessage) => void)[] = [];
   private connectionStatusListeners: ((status: 'connected' | 'disconnected' | 'reconnecting') => void)[] = [];
-  private url: string = import.meta.env.VITE_WS_URL || 'wss://localhost:3000';
+  private url: string = import.meta.env.VITE_WS_URL || 'ws://localhost:3000';
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
   private reconnectTimeout: number = 3000; // 3 secondi
@@ -16,8 +16,6 @@ class WebSocketService {
 
   // Controlla lo stato della connessione WebSocket
   checkConnection() {
-    console.log('Controllo connessione WebSocket...');
-    // Se non c'è connessione ma c'è un token, riconnetti
     if ((!this.ws || this.ws.readyState !== WebSocket.OPEN) && this.token) {
       console.log('Connessione non attiva, tentativo di riconnessione');
       this.reconnect(this.token);
@@ -36,9 +34,6 @@ class WebSocketService {
     }
 
     try {
-      // Log per debuggare
-      console.log('Tentativo di connessione WebSocket con token:', token ? 'presente' : 'mancante');
-      
       // URL WebSocket
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.hostname;
@@ -48,6 +43,16 @@ class WebSocketService {
       console.log('Connessione a:', wsUrl);
       
       this.updateConnectionStatus('reconnecting');
+      
+      // Chiudi qualsiasi connessione esistente
+      if (this.ws) {
+        try {
+          this.ws.close();
+        } catch (e) {
+          console.error('Errore nella chiusura del WebSocket:', e);
+        }
+      }
+      
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = this.onOpen.bind(this);
@@ -82,8 +87,23 @@ class WebSocketService {
   // Gestisce i messaggi in arrivo
   private onMessage(event: MessageEvent): void {
     try {
+      // Limitiamo il log a 100 caratteri per non intasare la console
       console.log('Messaggio WebSocket ricevuto:', event.data.substring(0, 100));
       const message = JSON.parse(event.data) as WebSocketMessage;
+      
+      // Log dettagliato per messaggi di chiamata - importante per debug
+      if (message.type === WebSocketMessageType.CALL_OFFER || 
+          message.type === WebSocketMessageType.CALL_ANSWER || 
+          message.type === WebSocketMessageType.CALL_END || 
+          message.type === WebSocketMessageType.CALL_REJECT) {
+        console.log(`WebSocketService: Ricevuto messaggio di chiamata ${message.type}`, {
+          senderId: message.senderId,
+          recipientId: message.recipientId,
+          isVideo: message.isVideo,
+          hasOffer: !!message.offer,
+          hasAnswer: !!message.answer
+        });
+      }
       
       // Notifica tutti i listener registrati
       this.messageListeners.forEach(listener => listener(message));
@@ -140,7 +160,6 @@ class WebSocketService {
         this.send({
           type: 'ping' as WebSocketMessageType,
         });
-        console.log('Heartbeat inviato');
       } catch (error) {
         console.error('Errore nell\'invio dell\'heartbeat:', error);
       }
@@ -215,6 +234,19 @@ class WebSocketService {
     }
 
     try {
+      // Log dettagliato per messaggi di chiamata - importante per debug
+      if (message.type === WebSocketMessageType.CALL_OFFER || 
+          message.type === WebSocketMessageType.CALL_ANSWER || 
+          message.type === WebSocketMessageType.CALL_END || 
+          message.type === WebSocketMessageType.CALL_REJECT) {
+        console.log(`WebSocketService: Invio messaggio di chiamata ${message.type}`, {
+          recipientId: message.recipientId,
+          isVideo: message.isVideo,
+          hasOffer: !!message.offer,
+          hasAnswer: !!message.answer
+        });
+      }
+      
       const messageStr = JSON.stringify(message);
       this.ws.send(messageStr);
       console.log(`Messaggio inviato: ${message.type}`);
@@ -276,15 +308,6 @@ class WebSocketService {
     });
   }
 
-  // Invia una ricevuta di lettura
-  sendReadReceipt(senderId: number, messageIds: number[]): void {
-    this.send({
-      type: WebSocketMessageType.READ_RECEIPT,
-      recipientId: senderId,
-      messageIds
-    });
-  }
-
   // Chiude la connessione WebSocket
   disconnect(): void {
     console.log('Disconnessione WebSocket volontaria');
@@ -315,7 +338,11 @@ class WebSocketService {
 
   // Aggiunge un listener per i messaggi
   addMessageListener(listener: (message: WebSocketMessage) => void): () => void {
-    this.messageListeners.push(listener);
+    // Verifica se il listener è già stato aggiunto per evitare duplicazioni
+    if (!this.messageListeners.includes(listener)) {
+      this.messageListeners.push(listener);
+    }
+    
     return () => {
       this.messageListeners = this.messageListeners.filter(l => l !== listener);
     };
@@ -323,9 +350,12 @@ class WebSocketService {
 
   // Aggiunge un listener per lo stato della connessione
   onConnectionStatusChange(listener: (status: 'connected' | 'disconnected' | 'reconnecting') => void): void {
-    this.connectionStatusListeners.push(listener);
-    // Invia subito lo stato attuale
-    listener(this.connectionStatus);
+    // Verifica se il listener è già stato aggiunto per evitare duplicazioni
+    if (!this.connectionStatusListeners.includes(listener)) {
+      this.connectionStatusListeners.push(listener);
+      // Invia subito lo stato attuale
+      listener(this.connectionStatus);
+    }
   }
 
   // Rimuove un listener per lo stato della connessione

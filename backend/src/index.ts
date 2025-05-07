@@ -310,6 +310,38 @@ app.get(
   }
 );
 
+// Endpoint per verificare gli utenti connessi (DEBUG)
+app.get("/api/debug/websocket-connections", (req: Request, res: Response) => {
+  try {
+    const connections: any[] = [];
+    let wss: WebSocketServer | undefined;
+    
+    // Ottieni il server WebSocket
+    if ((global as any).wss) {
+      wss = (global as any).wss;
+    }
+    
+    if (wss) {
+      wss.clients.forEach((client) => {
+        const extWs = client as ExtendedWebSocket;
+        connections.push({
+          userId: extWs.userId,
+          username: extWs.username,
+          readyState: extWs.readyState === WebSocket.OPEN ? 'OPEN' : 'CLOSED'
+        });
+      });
+    }
+    
+    res.json({
+      totalConnections: connections.length,
+      connections
+    });
+  } catch (error) {
+    console.error("Errore durante il recupero delle connessioni:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 // Avvia il server
 async function startServer() {
   try {
@@ -358,7 +390,10 @@ async function startServer() {
     }
 
     // Configura il server WebSocket
-    setupWebSocketServer(server);
+    const wss = setupWebSocketServer(server);
+    
+    // Rendi il WSS disponibile globalmente per il debugging
+    (global as any).wss = wss;
 
     // Middleware per servire file statici
     app.use(express.static(path.join(__dirname, "../public")));
@@ -484,6 +519,52 @@ function setupWebSocketServer(server: http.Server | https.Server) {
           try {
             const data = JSON.parse(message);
             console.log("Messaggio WebSocket ricevuto:", data.type);
+
+            // INIZIO CORREZIONE CRUCIALE: Gestione avanzata dei messaggi di chiamata
+            if (data.type === "call_offer" || data.type === "call_answer" || 
+                data.type === "call_reject" || data.type === "call_end" ||
+                data.type === "ice_candidate") {
+              
+              console.log("Messaggio di chiamata ricevuto:", {
+                type: data.type,
+                senderId: data.senderId,
+                recipientId: data.recipientId,
+                hasOffer: !!data.offer,
+                hasAnswer: !!data.answer
+              });
+              
+              // Verifica che il messaggio contenga il recipientId
+              if (!data.recipientId) {
+                console.error(`Messaggio ${data.type} senza recipientId, impossibile instradare`);
+                return;
+              }
+              
+              // Assicurati che il senderId sia sempre presente
+              if (!data.senderId && extWs.userId) {
+                data.senderId = extWs.userId;
+                console.log(`Aggiunto automaticamente senderId (${extWs.userId}) al messaggio ${data.type}`);
+              }
+              
+              // Invia il messaggio SOLO al destinatario specificato
+              let delivered = false;
+              wss.clients.forEach((client) => {
+                const clientWs = client as ExtendedWebSocket;
+                if (clientWs.readyState === WebSocket.OPEN && 
+                    clientWs.userId === data.recipientId) {
+                  console.log(`Inoltro messaggio ${data.type} da ${data.senderId} a ${data.recipientId}`);
+                  clientWs.send(JSON.stringify(data)); // Invia il messaggio
+                  delivered = true;
+                }
+              });
+              
+              // Log se il messaggio non è stato consegnato
+              if (!delivered) {
+                console.warn(`Impossibile consegnare messaggio ${data.type}: destinatario ${data.recipientId} non connesso`);
+              }
+              
+              return; // Termina qui per i messaggi di chiamata
+            }
+            // FINE CORREZIONE CRUCIALE
 
             if (data.type === "chat_message") {
               // Gestione messaggi chat

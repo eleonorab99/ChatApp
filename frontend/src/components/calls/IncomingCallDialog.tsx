@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -16,24 +16,79 @@ import useCall from '../../hooks/useCall';
 // Componente per mostrare una finestra di dialogo per chiamate in arrivo
 const IncomingCallDialog: React.FC = () => {
   const { isIncomingCall, isVideoCall, incomingCallData, answerCall, rejectCall } = useCall();
+  const [audioPlaying, setAudioPlaying] = useState<HTMLAudioElement | null>(null);
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Effetto per riprodurre un suono quando c'è una chiamata in arrivo
   useEffect(() => {
-    if (isIncomingCall) {
+    if (isIncomingCall && !audioPlaying) {
       // Crea un elemento audio e riproduci il suono di chiamata
+      console.log('Riproducendo suono di chiamata in arrivo');
       const audio = new Audio('/sounds/ringtone.mp3');
       audio.loop = true;
-      audio.play().catch(error => console.error('Errore nella riproduzione del suono:', error));
       
-      // Pulisci quando la chiamata termina
-      return () => {
-        audio.pause();
-        audio.currentTime = 0;
-      };
+      try {
+        audio.play()
+          .then(() => {
+            console.log('Riproduzione suono iniziata con successo');
+            setAudioPlaying(audio);
+          })
+          .catch(error => {
+            console.error('Errore nella riproduzione del suono:', error);
+            // Fallback: possiamo usare una notifica del browser se consentito
+            if ('Notification' in window && Notification.permission === 'granted') {
+              try {
+                new Notification('Chiamata in arrivo', {
+                  body: `Chiamata in arrivo da ${incomingCallData?.callerName || 'Utente'}`,
+                  icon: '/icons/call-icon.png'
+                });
+              } catch (notifError) {
+                console.error('Errore nella notifica:', notifError);
+              }
+            }
+          });
+      } catch (e) {
+        console.error('Errore generale nella riproduzione audio:', e);
+      }
     }
-  }, [isIncomingCall]);
+    
+    // Pulisci quando la chiamata termina
+    return () => {
+      if (audioPlaying) {
+        console.log('Interrompendo suono chiamata');
+        audioPlaying.pause();
+        audioPlaying.currentTime = 0;
+        setAudioPlaying(null);
+      }
+    };
+  }, [isIncomingCall, incomingCallData, audioPlaying]);
+
+  // Gestisci la risposta alla chiamata
+  const handleAnswerCall = () => {
+    // Ferma il suono prima di rispondere
+    if (audioPlaying) {
+      audioPlaying.pause();
+      audioPlaying.currentTime = 0;
+      setAudioPlaying(null);
+    }
+    
+    console.log('Risposta chiamata da IncomingCallDialog');
+    answerCall();
+  };
+
+  // Gestisci il rifiuto della chiamata
+  const handleRejectCall = () => {
+    // Ferma il suono prima di rifiutare
+    if (audioPlaying) {
+      audioPlaying.pause();
+      audioPlaying.currentTime = 0;
+      setAudioPlaying(null);
+    }
+    
+    console.log('Rifiuto chiamata da IncomingCallDialog');
+    rejectCall();
+  };
 
   if (!isIncomingCall || !incomingCallData) {
     return null;
@@ -44,22 +99,25 @@ const IncomingCallDialog: React.FC = () => {
       open={isIncomingCall}
       aria-labelledby="incoming-call-dialog-title"
       fullScreen={fullScreen}
-      sx={{
+      transitionDuration={300}
+      sx={{ 
         '& .MuiDialog-paper': {
           borderRadius: fullScreen ? 0 : 2,
           width: fullScreen ? '100%' : '100%',
           maxWidth: fullScreen ? '100%' : 400,
           margin: fullScreen ? 0 : 2,
-          overflow: 'hidden'
+          overflow: 'hidden',
+          zIndex: 2000 // Assicuriamoci che sia sopra tutti gli altri elementi
         },
       }}
+      onClose={handleRejectCall} // Chiude il dialogo se l'utente clicca fuori
     >
       <DialogTitle 
         id="incoming-call-dialog-title" 
         sx={{ 
           textAlign: 'center',
-          bgcolor: 'primary.main',
-          color: 'white',
+          bgcolor: '#ffd700',
+          color: 'black',
           py: 2
         }}
       >
@@ -78,7 +136,7 @@ const IncomingCallDialog: React.FC = () => {
             width: 100,
             height: 100,
             borderRadius: '50%',
-            bgcolor: 'primary.light',
+            bgcolor: '#ffd700',
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
@@ -86,7 +144,7 @@ const IncomingCallDialog: React.FC = () => {
             animation: 'pulse 1.5s infinite',
             '@keyframes pulse': {
               '0%': {
-                boxShadow: '0 0 0 0 rgba(255, 215, 0, 0.4)'
+                boxShadow: '0 0 0 0 rgba(255, 215, 0, 0.7)'
               },
               '70%': {
                 boxShadow: '0 0 0 20px rgba(255, 215, 0, 0)'
@@ -125,7 +183,7 @@ const IncomingCallDialog: React.FC = () => {
           variant="contained"
           color="error"
           startIcon={<CallEnd />}
-          onClick={rejectCall}
+          onClick={handleRejectCall}
           sx={{ 
             borderRadius: 28, 
             px: 3, 
@@ -144,7 +202,7 @@ const IncomingCallDialog: React.FC = () => {
           variant="contained"
           color="success"
           startIcon={isVideoCall ? <Videocam /> : <Call />}
-          onClick={answerCall}
+          onClick={handleAnswerCall}
           sx={{ 
             borderRadius: 28, 
             px: 3, 

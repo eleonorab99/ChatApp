@@ -1,8 +1,9 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Box, Paper, Typography, Backdrop, CircularProgress } from '@mui/material';
 import CallControls from './CallControls';
 import useCall from '../../hooks/useCall';
 import useChat from '../../hooks/useChat';
+import callService from '../../services/callService';
 
 // Componente per gestire la visualizzazione di una chiamata video
 const VideoCall: React.FC = () => {
@@ -13,25 +14,121 @@ const VideoCall: React.FC = () => {
     remoteStream, 
     isVideoEnabled, 
     isAudioEnabled,
-    error
+    error,
+    isInitiator
   } = useCall();
   const { currentRecipient } = useChat();
   
+  // Riferimenti agli elementi video
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
-
-  // Collegamento degli stream video ai riferimenti HTML
+  
+  // Stato per tracciare se i video sono già stati impostati
+  const [localVideoSet, setLocalVideoSet] = useState(false);
+  const [remoteVideoSet, setRemoteVideoSet] = useState(false);
+  
+  // Log dei componenti vitali per debugging
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-    }
-  }, [localStream]);
+    console.log("VideoCall - Stato componente:", {
+      isCallActive,
+      isVideoCall,
+      hasLocalStream: !!localStream,
+      hasRemoteStream: !!remoteStream,
+      localStreamTracks: localStream ? localStream.getTracks().map(t => t.kind) : [],
+      remoteStreamTracks: remoteStream ? remoteStream.getTracks().map(t => t.kind) : [],
+      isInitiator
+    });
+  }, [isCallActive, isVideoCall, localStream, remoteStream, isInitiator]);
 
+  // Pulizia quando il componente viene smontato o la chiamata termina
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+    // Cleanup quando il componente viene smontato
+    return () => {
+      // Se la chiamata era attiva e il componente viene smontato, assicuriamoci di pulire
+      if (isCallActive) {
+        console.log("VideoCall - Pulizia durante smontaggio del componente");
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = null;
+        }
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = null;
+        }
+      }
+    };
+  }, []);
+  
+  // Effetto per rilevare la fine della chiamata e pulire
+  useEffect(() => {
+    // Se la chiamata era attiva ed ora non lo è più, esegui una pulizia aggiuntiva
+    if (!isCallActive) {
+      console.log("VideoCall - Chiamata terminata, pulizia streams");
+      
+      // Pulizia esplicita dei riferimenti video
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+        setLocalVideoSet(false);
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null;
+        setRemoteVideoSet(false);
+      }
+      
+      // Extra: forza il rilascio delle risorse media quando la chiamata termina
+      callService.forceReleaseMediaResources().catch(err => {
+        console.warn("VideoCall - Errore nel rilascio forzato delle risorse:", err);
+      });
     }
-  }, [remoteStream]);
+  }, [isCallActive]);
+
+  // Funzione per impostare lo stream locale sull'elemento video
+  useEffect(() => {
+    if (localVideoRef.current && localStream && isCallActive) {
+      console.log("VideoCall - Impostazione stream locale:", { 
+        tracks: localStream.getTracks().map(t => `${t.kind}(${t.readyState}, ${t.enabled})`) 
+      });
+      
+      try {
+        localVideoRef.current.srcObject = localStream;
+        
+        // Verifica l'effettiva impostazione e avvia la riproduzione
+        if (localVideoRef.current.srcObject) {
+          console.log("VideoCall - Stream locale impostato con successo");
+          setLocalVideoSet(true);
+          
+          localVideoRef.current.play().catch(err => {
+            console.error("VideoCall - Errore nella riproduzione video locale:", err);
+          });
+        }
+      } catch (err) {
+        console.error("VideoCall - Errore nell'impostazione dello stream locale:", err);
+      }
+    }
+  }, [localStream, isCallActive, localVideoRef]);
+
+  // Effetto per impostare lo stream remoto sull'elemento video
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream && isCallActive) {
+      console.log("VideoCall - Impostazione stream remoto:", { 
+        tracks: remoteStream.getTracks().map(t => `${t.kind}(${t.readyState}, ${t.enabled})`) 
+      });
+      
+      try {
+        remoteVideoRef.current.srcObject = remoteStream;
+        
+        // Verifica l'effettiva impostazione e avvia la riproduzione
+        if (remoteVideoRef.current.srcObject) {
+          console.log("VideoCall - Stream remoto impostato con successo");
+          setRemoteVideoSet(true);
+          
+          remoteVideoRef.current.play().catch(err => {
+            console.error("VideoCall - Errore nella riproduzione video remoto:", err);
+          });
+        }
+      } catch (err) {
+        console.error("VideoCall - Errore nell'impostazione dello stream remoto:", err);
+      }
+    }
+  }, [remoteStream, isCallActive, remoteVideoRef]);
 
   // Se non c'è una chiamata attiva, non mostriamo nulla
   if (!isCallActive) {
@@ -110,6 +207,8 @@ const VideoCall: React.FC = () => {
               ref={remoteVideoRef}
               autoPlay
               playsInline
+              muted={false}
+              controls={false}
               style={{
                 width: '100%',
                 height: '100%',
@@ -177,8 +276,8 @@ const VideoCall: React.FC = () => {
           )}
         </Paper>
 
-        {/* Video locale (utente corrente) */}
-        {isVideoCall && (
+        {/* Video locale (utente corrente) - sempre visibile se in videochiamata */}
+        {isVideoCall && localStream && (
           <Paper
             elevation={4}
             sx={{
@@ -191,13 +290,15 @@ const VideoCall: React.FC = () => {
               borderRadius: 2,
               bgcolor: '#000',
               opacity: isVideoEnabled ? 1 : 0.7,
+              zIndex: 1500, // Valore molto alto per assicurare che sia visibile
             }}
           >
             <video
               ref={localVideoRef}
               autoPlay
               playsInline
-              muted
+              muted={true} // Importante per evitare l'eco
+              controls={false}
               style={{
                 width: '100%',
                 height: '100%',

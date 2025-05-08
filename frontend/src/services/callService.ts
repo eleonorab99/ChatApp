@@ -8,9 +8,11 @@ class CallService {
   private remoteStream: MediaStream | null = null;
   private currentRecipientId: number | null = null;
   private isVideoCall: boolean = false;
+  private isCallInitiator: boolean = false;
   
   // Callback per eventi
   private onRemoteStreamCallback: ((stream: MediaStream) => void) | null = null;
+  private onLocalStreamCallback: ((stream: MediaStream) => void) | null = null;
   private onCallEndedCallback: (() => void) | null = null;
   private onCallStartedCallback: (() => void) | null = null;
   private onIceConnectionStateChangeCallback: ((state: RTCIceConnectionState) => void) | null = null;
@@ -27,46 +29,93 @@ class CallService {
     iceCandidatePoolSize: 10
   };
 
+  // METODO OTTIMIZZATO per acquisire stream locale video/audio
+  private async getLocalMediaStream(withVideo: boolean): Promise<MediaStream> {
+    console.log(`CallService: Richiesta stream locale (video: ${withVideo})`);
+    
+    try {
+      // Prima tenta di ottenere audio + video se richiesto
+      if (withVideo) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              facingMode: "user"
+            }
+          });
+          console.log("CallService: Acquisiti stream audio e video di alta qualità");
+          
+          // Controlla che ci siano tracce video
+          const videoTracks = stream.getVideoTracks();
+          if (videoTracks.length === 0) {
+            throw new Error("Nessuna traccia video acquisita");
+          }
+          
+          return stream;
+        } catch (error) {
+          console.warn("CallService: Impossibile acquisire video di alta qualità, tentativo con impostazioni base", error);
+          
+          // Fallback a risoluzione più bassa
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+              video: true
+            });
+            console.log("CallService: Acquisiti stream audio e video base");
+            return stream;
+          } catch (videoError) {
+            console.error("CallService: Impossibile acquisire video, fallback a solo audio", videoError);
+            throw videoError; // Passa al fallback solo audio
+          }
+        }
+      }
+      
+      // Se qui, è richiesto solo audio o il video è fallito
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false
+      });
+      console.log("CallService: Acquisito solo stream audio");
+      return audioStream;
+    } catch (error) {
+      console.error("CallService: Errore fatale nell'acquisizione di media:", error);
+      throw new Error("Impossibile acquisire i dispositivi media. Verifica le autorizzazioni del browser.");
+    }
+  }
+
   // Inizia una chiamata
   async startCall(recipientId: number, withVideo: boolean = false): Promise<void> {
     try {
       console.log(`CallService: Avvio chiamata a ${recipientId} (video: ${withVideo})`);
       
-      if (this.peerConnection) {
-        console.log('CallService: Chiamata già attiva, chiudendo la precedente');
-        this.endCall();
+      // IMPORTANTE: Se c'è già una chiamata attiva, assicurati di terminarla correttamente
+      if (this.peerConnection || this.localStream) {
+        console.log('CallService: Chiamata già attiva o risorse presenti, pulizia completa prima di iniziare');
+        this.cleanupCall(true); // Forza pulizia completa
       }
 
       this.currentRecipientId = recipientId;
       this.isVideoCall = withVideo;
+      this.isCallInitiator = true;
 
-      // Richiedi i permessi media
+      // Ottieni media locale
       try {
-        console.log('CallService: Richiesta permessi media');
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: withVideo
-        });
-        console.log('CallService: Permessi media ottenuti');
-      } catch (error) {
-        console.error('CallService: Errore nell\'accesso ai dispositivi media:', error);
+        this.localStream = await this.getLocalMediaStream(withVideo);
         
-        // Se l'accesso video fallisce, proviamo solo con l'audio
-        if (withVideo) {
-          console.log('CallService: Tentativo fallback: solo audio');
-          try {
-            this.localStream = await navigator.mediaDevices.getUserMedia({
-              audio: true,
-              video: false
-            });
-            this.isVideoCall = false; // Downgrade a chiamata audio
-          } catch (audioError) {
-            console.error('CallService: Errore anche nell\'accesso all\'audio:', audioError);
-            throw new Error('Impossibile accedere ai dispositivi audio. Verifica le autorizzazioni del browser.');
-          }
-        } else {
-          throw new Error('Impossibile accedere ai dispositivi audio. Verifica le autorizzazioni del browser.');
+        // Aggiorna il flag video in base al risultato effettivo
+        this.isVideoCall = withVideo && this.localStream.getVideoTracks().length > 0;
+        
+        // Notifica lo stream locale
+        if (this.onLocalStreamCallback) {
+          console.log('CallService: Notifica dello stream locale al UI');
+          this.onLocalStreamCallback(this.localStream);
         }
+      } catch (error) {
+        console.error('CallService: Errore fatale nell\'acquisizione media:', error);
+        this.cleanupCall(true);
+        throw new Error('Impossibile accedere ai dispositivi media. Verifica le autorizzazioni del browser.');
       }
 
       // Crea peer connection
@@ -79,7 +128,12 @@ class CallService {
       // Aggiungi le tracce al peer connection
       this.localStream.getTracks().forEach(track => {
         if (this.peerConnection && this.localStream) {
-          this.peerConnection.addTrack(track, this.localStream);
+          console.log(`CallService: Aggiunta traccia ${track.kind} alla connessione`);
+          try {
+            this.peerConnection.addTrack(track, this.localStream);
+          } catch (err) {
+            console.error(`CallService: Errore nell'aggiunta della traccia ${track.kind}:`, err);
+          }
         }
       });
 
@@ -98,13 +152,12 @@ class CallService {
         // Invia l'offerta tramite WebSocket
         console.log('CallService: Invio offerta via WebSocket', { recipientId, isVideo: this.isVideoCall });
         
-        // Serializza l'offerta per l'invio WebSocket
         const serializableOffer = {
           type: offer.type,
           sdp: offer.sdp
         };
         
-        // MODIFICHE CRITICHE: Gestione dell'ID utente
+        // Gestione dell'ID utente
         const userId = Number(localStorage.getItem('userId'));
         if (!userId || isNaN(userId)) {
           console.error('CallService: ID utente mancante o non valido nel localStorage');
@@ -115,8 +168,7 @@ class CallService {
           recipientId: recipientId,
           offer: serializableOffer,
           isVideo: this.isVideoCall,
-          // Assicurati che l'ID mittente sia sempre definito
-          senderId: userId || 1 // Usa un ID di fallback se manca
+          senderId: userId || 1
         });
 
         // Notifica che la chiamata è iniziata
@@ -126,12 +178,12 @@ class CallService {
         
       } catch (error) {
         console.error('CallService: Errore nella creazione dell\'offerta:', error);
-        this.cleanupCall();
+        this.cleanupCall(true);
         throw new Error('Impossibile stabilire la chiamata. Riprova più tardi.');
       }
     } catch (error) {
       console.error('CallService: Errore durante l\'avvio della chiamata:', error);
-      this.cleanupCall();
+      this.cleanupCall(true);
       throw error;
     }
   }
@@ -141,36 +193,32 @@ class CallService {
     try {
       console.log(`CallService: Risposta a chiamata da ${callerId} (video: ${isVideo})`);
       
+      // IMPORTANTE: Se c'è già una chiamata attiva, assicurati di terminarla correttamente
+      if (this.peerConnection || this.localStream) {
+        console.log('CallService: Risorse esistenti trovate, pulizia completa prima di rispondere');
+        this.cleanupCall(true);
+      }
+      
       this.currentRecipientId = callerId;
       this.isVideoCall = isVideo;
+      this.isCallInitiator = false;
 
-      // Richiedi i permessi media
+      // Ottieni media locale
       try {
-        console.log('CallService: Richiesta permessi media per risposta');
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: isVideo
-        });
-        console.log('CallService: Permessi media ottenuti per risposta');
-      } catch (error) {
-        console.error('CallService: Errore nell\'accesso ai dispositivi media durante la risposta:', error);
+        this.localStream = await this.getLocalMediaStream(isVideo);
         
-        // Se l'accesso video fallisce, proviamo solo con l'audio
-        if (isVideo) {
-          console.log('CallService: Risposta: fallback a solo audio');
-          try {
-            this.localStream = await navigator.mediaDevices.getUserMedia({
-              audio: true,
-              video: false
-            });
-            this.isVideoCall = false; // Downgrade a chiamata audio
-          } catch (audioError) {
-            console.error('CallService: Errore anche nell\'accesso all\'audio:', audioError);
-            throw new Error('Impossibile accedere ai dispositivi audio. Verifica le autorizzazioni del browser.');
-          }
-        } else {
-          throw new Error('Impossibile accedere ai dispositivi audio. Verifica le autorizzazioni del browser.');
+        // Aggiorna il flag video in base al risultato effettivo
+        this.isVideoCall = isVideo && this.localStream.getVideoTracks().length > 0;
+        
+        // Notifica lo stream locale
+        if (this.onLocalStreamCallback) {
+          console.log('CallService: Notifica dello stream locale al UI (risposta)');
+          this.onLocalStreamCallback(this.localStream);
         }
+      } catch (error) {
+        console.error('CallService: Errore fatale nell\'acquisizione media (risposta):', error);
+        this.cleanupCall(true);
+        throw new Error('Impossibile accedere ai dispositivi media. Verifica le autorizzazioni del browser.');
       }
 
       // Crea peer connection
@@ -180,18 +228,11 @@ class CallService {
         throw new Error('Impossibile inizializzare la connessione per rispondere alla chiamata.');
       }
 
-      // Aggiungi le tracce al peer connection
-      this.localStream.getTracks().forEach(track => {
-        if (this.peerConnection && this.localStream) {
-          this.peerConnection.addTrack(track, this.localStream);
-        }
-      });
-
-      // Imposta l'offerta remota e crea una risposta
+      // Imposta prima l'offerta remota (importante per l'ordine)
       try {
         console.log('CallService: Impostazione della remote description', offer);
         
-        // Verifica che l'offerta sia nel formato corretto
+        // Verifica e normalizza l'offerta
         let offerObject;
         if (typeof offer === 'string') {
           offerObject = JSON.parse(offer);
@@ -199,7 +240,6 @@ class CallService {
           offerObject = offer;
         }
         
-        // Crea un oggetto RTCSessionDescription valido
         const sessionDesc = new RTCSessionDescription({
           type: offerObject.type,
           sdp: offerObject.sdp
@@ -207,8 +247,26 @@ class CallService {
         
         await this.peerConnection.setRemoteDescription(sessionDesc);
         console.log('CallService: Remote description impostata');
+      } catch (error) {
+        console.error('CallService: Errore nell\'impostazione della remote description:', error);
+        this.cleanupCall(true);
+        throw new Error('Impossibile processare l\'offerta di chiamata. Riprova più tardi.');
+      }
+
+      // Ora aggiungi le tracce locali
+      this.localStream.getTracks().forEach(track => {
+        if (this.peerConnection && this.localStream) {
+          console.log(`CallService: Aggiunta traccia ${track.kind} alla connessione (risposta)`);
+          try {
+            this.peerConnection.addTrack(track, this.localStream);
+          } catch (err) {
+            console.error(`CallService: Errore nell'aggiunta della traccia ${track.kind} (risposta):`, err);
+          }
+        }
+      });
         
-        // Crea una risposta
+      // Crea una risposta
+      try {
         console.log('CallService: Creazione risposta');
         const answer = await this.peerConnection.createAnswer();
         await this.peerConnection.setLocalDescription(answer);
@@ -217,13 +275,12 @@ class CallService {
         // Invia la risposta tramite WebSocket
         console.log('CallService: Invio risposta via WebSocket', { callerId, isVideo: this.isVideoCall });
         
-        // Serializza la risposta per l'invio WebSocket
         const serializableAnswer = {
           type: answer.type,
           sdp: answer.sdp
         };
         
-        // MODIFICHE CRITICHE: Gestione dell'ID utente
+        // Gestione dell'ID utente
         const userId = Number(localStorage.getItem('userId'));
         if (!userId || isNaN(userId)) {
           console.error('CallService: ID utente mancante o non valido nel localStorage');
@@ -234,8 +291,7 @@ class CallService {
           recipientId: callerId,
           answer: serializableAnswer,
           isVideo: this.isVideoCall,
-          // Assicurati che l'ID mittente sia sempre definito
-          senderId: userId || 1 // Usa un ID di fallback se manca
+          senderId: userId || 1
         });
 
         // Notifica che la chiamata è iniziata
@@ -243,13 +299,13 @@ class CallService {
           this.onCallStartedCallback();
         }
       } catch (error) {
-        console.error('CallService: Errore durante la risposta alla chiamata:', error);
-        this.cleanupCall();
+        console.error('CallService: Errore durante la creazione della risposta:', error);
+        this.cleanupCall(true);
         throw new Error('Impossibile rispondere alla chiamata. Riprova più tardi.');
       }
     } catch (error) {
       console.error('CallService: Errore durante la risposta alla chiamata:', error);
-      this.cleanupCall();
+      this.cleanupCall(true);
       throw error;
     }
   }
@@ -258,7 +314,7 @@ class CallService {
   rejectCall(callerId: number): void {
     console.log(`CallService: Rifiuto chiamata da ${callerId}`);
     
-    // MODIFICHE CRITICHE: Gestione dell'ID utente
+    // Gestione dell'ID utente
     const userId = Number(localStorage.getItem('userId'));
     if (!userId || isNaN(userId)) {
       console.error('CallService: ID utente mancante o non valido nel localStorage');
@@ -268,12 +324,11 @@ class CallService {
     websocketService.send({
       type: WebSocketMessageType.CALL_REJECT,
       recipientId: callerId,
-      // Assicurati che l'ID mittente sia sempre definito
-      senderId: userId || 1 // Usa un ID di fallback se manca
+      senderId: userId || 1
     });
     
     // Pulisce eventuali risorse già allocate
-    this.cleanupCall();
+    this.cleanupCall(true);
   }
 
   // Termina una chiamata attiva
@@ -282,7 +337,7 @@ class CallService {
     
     // Invia un messaggio di fine chiamata al destinatario attuale
     if (this.currentRecipientId) {
-      // MODIFICHE CRITICHE: Gestione dell'ID utente
+      // Gestione dell'ID utente
       const userId = Number(localStorage.getItem('userId'));
       if (!userId || isNaN(userId)) {
         console.error('CallService: ID utente mancante o non valido nel localStorage');
@@ -291,13 +346,12 @@ class CallService {
       websocketService.send({
         type: WebSocketMessageType.CALL_END,
         recipientId: this.currentRecipientId,
-        // Assicurati che l'ID mittente sia sempre definito
-        senderId: userId || 1 // Usa un ID di fallback se manca
+        senderId: userId || 1
       });
     }
     
     // Pulisce le risorse
-    this.cleanupCall();
+    this.cleanupCall(true);
   }
 
   // Toglie/aggiunge l'audio
@@ -379,7 +433,7 @@ class CallService {
       }
     } catch (error) {
       console.error('CallService: Errore nella gestione della risposta:', error);
-      this.cleanupCall();
+      this.cleanupCall(true);
     }
   }
 
@@ -420,7 +474,20 @@ class CallService {
   private createPeerConnection(): void {
     try {
       console.log('CallService: Creazione della peer connection');
+      
+      // Assicurati di chiudere qualsiasi connessione esistente
+      if (this.peerConnection) {
+        this.peerConnection.close();
+        this.peerConnection = null;
+      }
+      
       this.peerConnection = new RTCPeerConnection(this.config);
+      
+      // Crea un nuovo stream remoto
+      this.remoteStream = new MediaStream();
+      if (this.onRemoteStreamCallback) {
+        this.onRemoteStreamCallback(this.remoteStream);
+      }
       
       // Handler per i candidati ICE
       this.peerConnection.onicecandidate = (event) => {
@@ -435,7 +502,7 @@ class CallService {
             usernameFragment: event.candidate.usernameFragment
           };
           
-          // MODIFICHE CRITICHE: Gestione dell'ID utente
+          // Gestione dell'ID utente
           const userId = Number(localStorage.getItem('userId'));
           if (!userId || isNaN(userId)) {
             console.error('CallService: ID utente mancante o non valido nel localStorage');
@@ -445,8 +512,7 @@ class CallService {
             type: WebSocketMessageType.ICE_CANDIDATE,
             recipientId: this.currentRecipientId,
             candidate: serializableCandidate,
-            // Assicurati che l'ID mittente sia sempre definito
-            senderId: userId || 1 // Usa un ID di fallback se manca
+            senderId: userId || 1
           });
         } else if (!event.candidate) {
           console.log('CallService: Raccolta candidati ICE completata');
@@ -457,27 +523,19 @@ class CallService {
       this.peerConnection.ontrack = (event) => {
         console.log('CallService: Ricevuta traccia remota:', event.track.kind);
         
-        if (!this.remoteStream) {
-          console.log('CallService: Creazione del remote stream');
-          this.remoteStream = new MediaStream();
-          
-          if (this.onRemoteStreamCallback) {
-            this.onRemoteStreamCallback(this.remoteStream);
-          }
-        }
-        
-        // Aggiungiamo tutte le tracce
-        if (event.streams && event.streams.length > 0) {
-          event.streams[0].getTracks().forEach(track => {
-            if (this.remoteStream) {
-              console.log(`CallService: Aggiunta traccia ${track.kind} allo stream remoto`);
-              this.remoteStream.addTrack(track);
-            }
-          });
-        } else if (event.track) {
-          // Fallback se non ci sono stream
-          console.log(`CallService: Aggiunta traccia singola ${event.track.kind} allo stream remoto`);
+        // Aggiungi la traccia allo stream remoto
+        if (this.remoteStream) {
           this.remoteStream.addTrack(event.track);
+          console.log(`CallService: Aggiunta traccia ${event.track.kind} allo stream remoto`);
+          
+          // NUOVO: Verifica se questo è il primo arrivo delle tracce
+          if (this.remoteStream.getTracks().length === 1) {
+            console.log('CallService: Prima traccia ricevuta, notifica del nuovo stream remoto');
+            // Rinotifica lo stream remoto
+            if (this.onRemoteStreamCallback) {
+              this.onRemoteStreamCallback(this.remoteStream);
+            }
+          }
         }
       };
 
@@ -559,7 +617,7 @@ class CallService {
         sdp: offer.sdp
       };
       
-      // MODIFICHE CRITICHE: Gestione dell'ID utente
+      // Gestione dell'ID utente
       const userId = Number(localStorage.getItem('userId'));
       if (!userId || isNaN(userId)) {
         console.error('CallService: ID utente mancante o non valido nel localStorage');
@@ -570,8 +628,7 @@ class CallService {
         recipientId: this.currentRecipientId,
         offer: serializableOffer,
         isVideo: this.isVideoCall,
-        // Assicurati che l'ID mittente sia sempre definito
-        senderId: userId || 1 // Usa un ID di fallback se manca
+        senderId: userId || 1
       });
       
       console.log('CallService: Riavvio ICE iniziato');
@@ -581,44 +638,106 @@ class CallService {
     }
   }
 
-  // Pulisce lo stato della chiamata e rilascia le risorse
-  private cleanupCall(): void {
-    console.log('CallService: Pulizia risorse chiamata');
+  // METODO MIGLIORATO: Pulisce lo stato della chiamata e rilascia le risorse
+  private cleanupCall(forceFull: boolean = false): void {
+    console.log(`CallService: Pulizia risorse chiamata ${forceFull ? '(completa forzata)' : ''}`);
     
-    // Ferma tutte le tracce locali
+    // Rilascia le risorse dello stream remoto
+    if (this.remoteStream) {
+      try {
+        this.remoteStream.getTracks().forEach(track => {
+          track.stop();
+          this.remoteStream?.removeTrack(track);
+        });
+      } catch (err) {
+        console.warn('CallService: Errore nel rilascio delle tracce dello stream remoto:', err);
+      }
+      this.remoteStream = null;
+    }
+    
+    // Rilascia le risorse dello stream locale - IMPORTANTE per evitare conflitti
     if (this.localStream) {
-      this.localStream.getTracks().forEach(track => {
-        track.stop();
-      });
-      this.localStream = null;
+      try {
+        console.log('CallService: Arresto di tutte le tracce locali');
+        this.localStream.getTracks().forEach(track => {
+          console.log(`CallService: Arresto traccia ${track.kind} (enabled: ${track.enabled}, readyState: ${track.readyState})`);
+          track.stop();
+        });
+        this.localStream = null;
+      } catch (err) {
+        console.warn('CallService: Errore nel rilascio delle tracce dello stream locale:', err);
+      }
     }
     
     // Chiudi la connessione peer
     if (this.peerConnection) {
-      // Rimuovi tutti gli event listener
-      this.peerConnection.onicecandidate = null;
-      this.peerConnection.ontrack = null;
-      this.peerConnection.oniceconnectionstatechange = null;
-      this.peerConnection.onconnectionstatechange = null;
-      
-      // Chiudi la connessione
-      this.peerConnection.close();
+      try {
+        // Rimuovi tutti gli event listener
+        this.peerConnection.onicecandidate = null;
+        this.peerConnection.ontrack = null;
+        this.peerConnection.oniceconnectionstatechange = null;
+        this.peerConnection.onconnectionstatechange = null;
+        
+        // Chiudi la connessione
+        this.peerConnection.close();
+      } catch (err) {
+        console.warn('CallService: Errore nella chiusura della connessione peer:', err);
+      }
       this.peerConnection = null;
     }
     
     // Reimposta le variabili di stato
-    this.remoteStream = null;
     this.currentRecipientId = null;
+    this.isCallInitiator = false;
+    
+    // IMPORTANTE: Libera la memoria video esplicitamente
+    if (forceFull) {
+      try {
+        // Richiedi al browser di rilasciare esplicitamente le risorse della telecamera
+        navigator.mediaDevices.getUserMedia({ audio: false, video: false })
+          .then(stream => {
+            // Questo è solo un trick per forzare il rilascio delle risorse
+            stream.getTracks().forEach(track => track.stop());
+          })
+          .catch(err => {
+            console.warn('CallService: Piccolo errore nel rilascio forzato delle risorse:', err);
+          });
+      } catch (e) {
+        console.warn('CallService: Errore nel rilascio forzato delle risorse:', e);
+      }
+    }
     
     // Notifica che la chiamata è terminata
     if (this.onCallEndedCallback) {
       this.onCallEndedCallback();
+    }
+    
+    // NUOVO: Piccolo delay per garantire il completo rilascio delle risorse
+    if (forceFull) {
+      setTimeout(() => {
+        console.log('CallService: Pulizia completa terminata');
+      }, 500);
     }
   }
 
   // Imposta il callback per lo stream remoto
   setOnRemoteStream(callback: (stream: MediaStream) => void): void {
     this.onRemoteStreamCallback = callback;
+    
+    // Se abbiamo già uno stream remoto, notificalo subito
+    if (this.remoteStream && callback) {
+      callback(this.remoteStream);
+    }
+  }
+  
+  // Imposta il callback per lo stream locale
+  setOnLocalStream(callback: (stream: MediaStream) => void): void {
+    this.onLocalStreamCallback = callback;
+    
+    // Se abbiamo già uno stream locale, notificalo subito
+    if (this.localStream && callback) {
+      callback(this.localStream);
+    }
   }
 
   // Imposta il callback per la fine della chiamata
@@ -632,31 +751,85 @@ class CallService {
   }
 
   // Imposta il callback per il cambio di stato della connessione ICE
-  setOnIceConnectionStateChange(callback: (state: RTCIceConnectionState) => void): void {
-    this.onIceConnectionStateChangeCallback = callback;
+  setOnIceConnectionStateChange(
+    callback: (state: RTCIceConnectionState) => void): void {
+      this.onIceConnectionStateChangeCallback = callback;
+    }
+  
+    // Getter per lo stream locale
+    getLocalStream(): MediaStream | null {
+      return this.localStream;
+    }
+  
+    // Getter per lo stream remoto
+    getRemoteStream(): MediaStream | null {
+      return this.remoteStream;
+    }
+  
+    // Verifica se c'è una chiamata attiva
+    isCallActive(): boolean {
+      return this.peerConnection !== null && this.localStream !== null;
+    }
+  
+    // Verifica se è una videochiamata
+    isVideoCallActive(): boolean {
+      return this.isVideoCall;
+    }
+    
+    // Verifica se siamo l'iniziatore della chiamata
+    isInitiator(): boolean {
+      return this.isCallInitiator;
+    }
+    
+    // NUOVO: Metodo per diagnosticare lo stato dei dispositivi media
+    async checkMediaDevices(): Promise<{audio: boolean, video: boolean}> {
+      let hasAudio = false;
+      let hasVideo = false;
+      
+      try {
+        // Enumera i dispositivi
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        
+        // Verifica che ci siano microfoni
+        hasAudio = devices.some(device => device.kind === 'audioinput');
+        
+        // Verifica che ci siano webcam
+        hasVideo = devices.some(device => device.kind === 'videoinput');
+        
+        console.log('CallService: Dispositivi disponibili:', {
+          microphones: devices.filter(d => d.kind === 'audioinput').length,
+          cameras: devices.filter(d => d.kind === 'videoinput').length
+        });
+        
+        return { audio: hasAudio, video: hasVideo };
+      } catch (error) {
+        console.error('CallService: Errore nell\'enumerazione dei dispositivi media:', error);
+        return { audio: false, video: false };
+      }
+    }
+    
+    // NUOVO: Metodo per forzare il rilascio delle risorse media
+    async forceReleaseMediaResources(): Promise<void> {
+      console.log('CallService: Forzatura rilascio risorse media');
+      
+      // Prima assicurati che tutte le chiamate attive siano terminate
+      this.cleanupCall(true);
+      
+      try {
+        // Trick per forzare il rilascio delle risorse della telecamera
+        const emptyStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: false });
+        emptyStream.getTracks().forEach(track => track.stop());
+        
+        // Attendere un piccolo periodo per permettere al browser di rilasciare le risorse
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        console.log('CallService: Rilascio risorse completato');
+      } catch (error) {
+        console.warn('CallService: Errore nel rilascio forzato delle risorse:', error);
+      }
+    }
   }
-
-  // Getter per lo stream locale
-  getLocalStream(): MediaStream | null {
-    return this.localStream;
-  }
-
-  // Getter per lo stream remoto
-  getRemoteStream(): MediaStream | null {
-    return this.remoteStream;
-  }
-
-  // Verifica se c'è una chiamata attiva
-  isCallActive(): boolean {
-    return this.peerConnection !== null && this.localStream !== null;
-  }
-
-  // Verifica se è una videochiamata
-  isVideoCallActive(): boolean {
-    return this.isVideoCall;
-  }
-}
-
-// Esporta un'istanza del servizio di chiamata
-const callService = new CallService();
-export default callService;
+  
+  // Esporta un'istanza del servizio di chiamata
+  const callService = new CallService();
+  export default callService;

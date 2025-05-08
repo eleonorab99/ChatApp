@@ -20,7 +20,8 @@ type CallAction =
   | { type: 'SET_REMOTE_STREAM'; payload: MediaStream }
   | { type: 'SET_LOCAL_STREAM'; payload: MediaStream }
   | { type: 'TOGGLE_AUDIO'; payload: boolean }
-  | { type: 'TOGGLE_VIDEO'; payload: boolean };
+  | { type: 'TOGGLE_VIDEO'; payload: boolean }
+  | { type: 'RESET_CALL_STATE' }; // Nuova azione per reset completo
 
 // Stato iniziale
 const initialState: CallState = {
@@ -33,6 +34,7 @@ const initialState: CallState = {
   localStream: null,
   callPartner: null,
   error: null,
+  isInitiator: false,
 };
 
 // Reducer per gestire lo stato delle chiamate
@@ -48,6 +50,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         isVideoEnabled: true,
         error: null,
         callPartner: action.payload.callPartner,
+        isInitiator: true,
       };
     case 'CALL_CONNECTED':
       return {
@@ -61,6 +64,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
         isIncomingCall: true,
         isVideoCall: action.payload.isVideo,
         error: null,
+        isInitiator: false,
       };
     case 'CALL_ACCEPTED':
       return {
@@ -73,7 +77,7 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
       return {
         ...initialState,
       };
-    case 'CALL_ENDED':
+    case 'CALL_ENDED': 
       return {
         ...initialState,
       };
@@ -101,6 +105,11 @@ const callReducer = (state: CallState, action: CallAction): CallState => {
       return {
         ...state,
         isVideoEnabled: action.payload,
+      };
+    case 'RESET_CALL_STATE':
+      // Reset completo dello stato
+      return {
+        ...initialState
       };
     default:
       return state;
@@ -146,6 +155,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [incomingCallData, setIncomingCallData] = useState<IncomingCallData | null>(null);
   const { addNotification } = useApp();
   
+  // Flag per tracciare se una chiamata è stata terminata manualmente
+  const callEndedManually = useRef<boolean>(false);
+  
   // Riferimento per memorizzare il listener WebSocket
   const listenerRef = useRef<((message: WebSocketMessage) => void) | null>(null);
 
@@ -157,24 +169,38 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('CallContext: Stream remoto ricevuto');
         dispatch({ type: 'SET_REMOTE_STREAM', payload: stream });
       });
+      
+      // Callback per stream locale
+      callService.setOnLocalStream((stream) => {
+        console.log('CallContext: Stream locale ricevuto');
+        dispatch({ type: 'SET_LOCAL_STREAM', payload: stream });
+      });
 
       // Callback per fine chiamata
       callService.setOnCallEnded(() => {
         console.log('CallContext: Chiamata terminata dal callback');
+        
+        // Resetta lo stato della chiamata
         dispatch({ type: 'CALL_ENDED' });
         setIncomingCallData(null);
+        
+        // Se la chiamata non è stata terminata manualmente, mostra una notifica
+        if (!callEndedManually.current) {
+          addNotification({
+            type: 'info',
+            message: 'Chiamata terminata',
+            autoHideDuration: 3000
+          });
+        }
+        
+        // Resetta il flag
+        callEndedManually.current = false;
       });
 
       // Callback per inizio chiamata
       callService.setOnCallStarted(() => {
         console.log('CallContext: Chiamata avviata dal callback');
         dispatch({ type: 'CALL_CONNECTED' });
-        
-        // Aggiorna local stream
-        const localStream = callService.getLocalStream();
-        if (localStream) {
-          dispatch({ type: 'SET_LOCAL_STREAM', payload: localStream });
-        }
       });
 
       // Callback per cambio stato connessione ICE
@@ -183,12 +209,27 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (state === 'connected') {
           dispatch({ type: 'CALL_CONNECTED' });
         } else if (state === 'failed' || state === 'closed') {
+          // Chiamata terminata a causa di problemi di connessione
+          if (callEndedManually.current) {
+            console.log('CallContext: Chiamata già terminata manualmente, ignoro evento ICE:', state);
+            return;
+          }
+          
           dispatch({ type: 'CALL_ENDED' });
           setIncomingCallData(null);
+          
+          // Mostra un messaggio specifico per il problema di connessione
+          if (state === 'failed') {
+            addNotification({
+              type: 'error',
+              message: 'Chiamata interrotta a causa di problemi di connessione',
+              autoHideDuration: 5000
+            });
+          }
         }
       });
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, addNotification]);
 
   // Gestisce i messaggi WebSocket relativi alle chiamate
   const handleWebSocketMessage = useCallback((message: WebSocketMessage) => {
@@ -209,6 +250,23 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Verifica che ci sia un'offerta valida
           if (!message.offer) {
             console.error('CallContext: Offerta di chiamata mancante');
+            return;
+          }
+          
+          // Se siamo già in chiamata, invia un messaggio di rifiuto
+          if (state.isCallActive || state.isIncomingCall) {
+            console.log('CallContext: Già in chiamata, rifiuto automatico');
+            if (message.senderId) {
+              callService.rejectCall(message.senderId);
+            }
+            
+            // Invia notifica
+            addNotification({
+              type: 'info',
+              message: `Chiamata in arrivo da ${callerName} rifiutata automaticamente (già in chiamata)`,
+              autoHideDuration: 5000
+            });
+            
             return;
           }
           
@@ -241,32 +299,51 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
         }
         break;
+        
       case WebSocketMessageType.CALL_END:
         if (state.isCallActive || state.isIncomingCall) {
           console.log('CallContext: Fine chiamata ricevuta');
+          
+          // Reset completo
           dispatch({ type: 'CALL_ENDED' });
           setIncomingCallData(null);
           
-          addNotification({
-            type: 'info',
-            message: 'Chiamata terminata',
-            autoHideDuration: 3000
-          });
+          // Mostra notifica se non è stata terminata manualmente
+          if (!callEndedManually.current) {
+            addNotification({
+              type: 'info',
+              message: 'Chiamata terminata dall\'altro utente',
+              autoHideDuration: 3000
+            });
+          }
+          
+          // Resetta il flag
+          callEndedManually.current = false;
         }
         break;
+        
       case WebSocketMessageType.CALL_REJECT:
         if (state.isCallActive) {
           console.log('CallContext: Rifiuto chiamata ricevuto');
-          dispatch({ type: 'CALL_REJECTED' });
+          
+          // Reset completo
+          dispatch({ type: 'CALL_ENDED' });
           setIncomingCallData(null);
           
-          addNotification({
-            type: 'info',
-            message: 'Chiamata rifiutata',
-            autoHideDuration: 3000
-          });
+          // Mostra notifica se non è stata terminata manualmente
+          if (!callEndedManually.current) {
+            addNotification({
+              type: 'info',
+              message: 'Chiamata rifiutata',
+              autoHideDuration: 3000
+            });
+          }
+          
+          // Resetta il flag
+          callEndedManually.current = false;
         }
         break;
+        
       default:
         // Passa gli altri messaggi relativi alle chiamate al servizio di chiamata
         callService.handleWebSocketMessage(message);
@@ -306,6 +383,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log(`CallContext: Avvio chiamata a ${currentRecipient.username} (video: ${withVideo})`);
     
     try {
+      // Resetta completamente lo stato prima di iniziare una nuova chiamata
+      dispatch({ type: 'RESET_CALL_STATE' });
+      
+      // Imposta lo stato per la nuova chiamata
       dispatch({ 
         type: 'CALL_START', 
         payload: { 
@@ -313,6 +394,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           callPartner: currentRecipient
         } 
       });
+      
+      // Resetta il flag
+      callEndedManually.current = false;
       
       // Verifica che il destinatario sia online
       if (!currentRecipient.isOnline) {
@@ -332,6 +416,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       
+      // Avvia la chiamata
       await callService.startCall(currentRecipient.userId, withVideo);
       
       addNotification({
@@ -345,6 +430,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error instanceof Error) {
         errorMessage = error.message;
       }
+      
+      // Reset dello stato in caso di errore
       dispatch({ type: 'CALL_ERROR', payload: errorMessage });
       
       addNotification({
@@ -365,7 +452,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('CallContext: Risposta a chiamata da', incomingCallData.callerName);
     
     try {
+      // Imposta lo stato per la risposta
       dispatch({ type: 'CALL_ACCEPTED' });
+      
+      // Resetta il flag
+      callEndedManually.current = false;
       
       // IMPORTANTE: Assicurati che l'ID utente sia nel localStorage
       const userId = localStorage.getItem('userId');
@@ -376,6 +467,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
       
+      // Rispondi alla chiamata
       await callService.answerCall(
         incomingCallData.callerId,
         incomingCallData.offer,
@@ -393,6 +485,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error instanceof Error) {
         errorMessage = error.message;
       }
+      
+      // Reset dello stato in caso di errore
       dispatch({ type: 'CALL_ERROR', payload: errorMessage });
       
       addNotification({
@@ -407,7 +501,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const rejectCall = (): void => {
     if (incomingCallData) {
       console.log('CallContext: Rifiuto chiamata da', incomingCallData.callerName);
+      
+      // Imposta il flag che la chiamata è stata terminata manualmente
+      callEndedManually.current = true;
+      
+      // Rifiuta la chiamata
       callService.rejectCall(incomingCallData.callerId);
+      
+      // Reset dello stato
       dispatch({ type: 'CALL_REJECTED' });
       setIncomingCallData(null);
       
@@ -421,8 +522,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Funzione per terminare una chiamata attiva
   const endCall = (): void => {
-    console.log('CallContext: Termine chiamata');
+    console.log('CallContext: Termine chiamata manuale');
+    
+    // Imposta il flag che la chiamata è stata terminata manualmente
+    callEndedManually.current = true;
+    
+    // Termina la chiamata
     callService.endCall();
+    
+    // Reset dello stato
     dispatch({ type: 'CALL_ENDED' });
     setIncomingCallData(null);
     

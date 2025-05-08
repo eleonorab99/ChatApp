@@ -1,4 +1,4 @@
-import { OnlineUser } from './chat.types';
+import { Contact } from './user.types';
 
 // Interfaccia per lo stato della chiamata
 export interface CallState {
@@ -9,8 +9,9 @@ export interface CallState {
   isVideoEnabled: boolean;
   remoteStream: MediaStream | null;
   localStream: MediaStream | null;
-  callPartner: OnlineUser | null;
+  callPartner: Contact | null;
   error: string | null;
+  isInitiator?: boolean; // NUOVO: indica se l'utente è l'iniziatore della chiamata
 }
 
 // Configurazione per la connessione WebRTC

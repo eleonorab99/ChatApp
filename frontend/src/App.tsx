@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './contexts/AppProvider';
 import Login from './components/auth/Login/Login';
@@ -10,6 +10,7 @@ import useAuth from './hooks/useAuth';
 import RouteLogger from './components/debug/RouteLogger';
 import { CircularProgress, Box } from '@mui/material';
 import PaginaImpostazioni from './components/common/Setting/Settings';
+import { setupCameras } from './startup/cameraSetup';
 
 // Componente di caricamento
 const LoadingFallback = () => (
@@ -42,6 +43,13 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 
 // Componente per i percorsi dell'app
 const AppRoutes = () => {
+  // Inizializza le telecamere all'avvio dell'app
+  useEffect(() => {
+    setupCameras().catch(e => {
+      console.error("Errore durante il setup delle telecamere:", e);
+    });
+  }, []);
+  
   return (
     <Suspense fallback={<LoadingFallback />}>
       <RouteLogger /> {/* Per debug della navigazione */}

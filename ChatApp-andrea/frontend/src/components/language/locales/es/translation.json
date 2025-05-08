@@ -1,0 +1,39 @@
+{
+    "app": {
+      "title": "Connectly",
+      "settings": "Configuración"
+    },
+    "settings": {
+      "language": "Idioma",
+      "theme": "Tema",
+      "notifications": "Notificaciones",
+      "privacy": "Privacidad",
+      "assistance": "Asistencia"
+    },
+    "language": {
+      "title": "Configuración de Idioma"
+    },
+    "privacy": {
+      "title": "Privacidad y Seguridad",
+      "description": "Modificar la configuración de privacidad y seguridad."
+    },
+    "assistance": {
+      "title": "Asistencia",
+      "description": "Contactar con soporte o consultar las FAQ."
+    },
+    "navbar": {
+      "search": "Buscar...",
+      "toggleLight": "Cambiar al tema claro",
+      "toggleDark": "Cambiar al tema oscuro"
+    },
+    "backToDashboard": "Volver al Panel de Control",
+    "messageInput": {
+      "caricamento": "Cargando...",
+      "allega": "Adjuntar archivo",
+      "scrivi": "Escribe un mensaje...",
+      "invia": "Enviar mensaje",
+      "utenti": "Usuarios en línea",
+      "nessunUtente": "Ningún otro usuario en línea",
+      "chatGlobale": "Chat global"
+    }
+  }

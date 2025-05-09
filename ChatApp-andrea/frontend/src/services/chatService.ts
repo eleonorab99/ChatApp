@@ -12,7 +12,7 @@ const chatService = {
     console.log(`Recupero messaggi per recipientId: ${recipientId}`);
     try {
       // Verifica che l'API URL sia corretto
-      const apiUrl = `/messages?recipientId=${recipientId}`;
+      const apiUrl = `/api/messages?recipientId=${recipientId}`;  // CORRETTO: aggiunto "/api" al percorso
       console.log('Chiamata API a:', apiUrl);
       
       const response = await api.get<Message[]>(apiUrl);
@@ -45,7 +45,7 @@ const chatService = {
     try {
       console.log('Recupero contatti dal server...');
       // Verifica che l'API URL sia corretto - controlla che ci sia /api
-      const apiUrl = '/contacts';
+      const apiUrl = '/api/contacts';  // CORRETTO: già con "/api" nel percorso
       console.log('Chiamata API a:', apiUrl);
       
       const response = await api.get<Contact[]>(apiUrl);
@@ -91,7 +91,7 @@ const chatService = {
 
     try {
       // Verifica che l'API URL sia corretto
-      const apiUrl = '/api/upload';
+      const apiUrl = '/api/upload';  // CORRETTO: già con "/api" nel percorso
       console.log('Chiamata API a:', apiUrl);
       
       const response = await api.post<{ fileUrl: string }>(apiUrl, formData, {
@@ -115,7 +115,7 @@ const chatService = {
   markMessagesAsRead: async (senderId: number): Promise<void> => {
     try {
       console.log(`Segno come letti i messaggi da: ${senderId}`);
-      await api.post('/messages/read', { senderId });
+      await api.post('/api/messages/read', { senderId });  // CORRETTO: aggiunto "/api" al percorso
     } catch (error) {
       console.error('Errore nel marcare i messaggi come letti:', error);
     }

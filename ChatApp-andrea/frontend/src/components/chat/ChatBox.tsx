@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box } from '@mui/material';
 import UserList from './UserList';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import VideoCall from '../calls/VideoCall';
+import ChatHeader from './ChatHeader';
 import useChat from '../../hooks/useChat';
 
 // Componente principale della chat che unisce tutti i sottocomponenti
@@ -56,20 +57,7 @@ const ChatBox: React.FC = () => {
           bgcolor: 'background.paper' // Sfondo bianco per l'area chat
         }}>
           {/* Header della chat - fisso */}
-          <Box sx={{ 
-            height: 'auto',
-            borderBottom: 1,
-            borderColor: 'divider',
-            backgroundColor: 'background.paper',
-            p: 2,
-            zIndex: 10 // Assicura che rimanga sopra il contenuto scrollabile
-          }}>
-            {currentRecipient && (
-              <Typography variant="h6">
-                Chat con {currentRecipient.username}
-              </Typography>
-            )}
-          </Box>
+          <ChatHeader />
           
           {/* Area dei messaggi - scrollabile */}
           <Box sx={{ 

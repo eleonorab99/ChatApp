@@ -1,40 +1,60 @@
 {
-    "app": {
-      "title": "Connectly",
-      "settings": "Impostazioni"
-    },
-    "settings": {
-      "language": "Lingua",
-      "theme": "Tema",
-      "notifications": "Notifiche",
-      "privacy": "Privacy",
-      "assistance": "Assistenza"
-    },
-    "language": {
-      "title": "Impostazioni Lingua"
-    },
-    "privacy": {
-      "title": "Privacy e Sicurezza",
-      "description": "Modifica le impostazioni relative a privacy e sicurezza."
-    },
-    "assistance": {
-      "title": "Assistenza",
-      "description": "Contatta il supporto o consulta le FAQ."
-    },
-    "navbar": {
-      "search": "Cerca...",
-      "toggleLight": "Passa al tema chiaro",
-      "toggleDark": "Passa al tema scuro"
-    },
-    "backToDashboard": "Torna alla Dashboard",
-    "messageInput": {
-      "caricamento": "Caricamento in corso...",
-      "allega": "Allega file",
-      "scrivi": "Scrivi un messaggio...",
-      "invia": "Invia messaggio",
-      "utenti": "Utenti Online",
-      "nessunUtente": "Nessun altro utente online",
-      "chatGlobale": "Chat globale"
-    }
-    
+  "app": {
+    "title": "Connectly",
+    "settings": "Impostazioni"
+  },
+  "settings": {
+    "language": "Lingua",
+    "theme": "Tema",
+    "notifications": "Notifiche",
+    "privacy": "Privacy",
+    "assistance": "Assistenza",
+    "profile": "Profilo"
+  },
+  "language": {
+    "title": "Impostazioni Lingua"
+  },
+  "privacy": {
+    "title": "Privacy e Sicurezza",
+    "description": "Modifica le impostazioni relative a privacy e sicurezza."
+  },
+  "assistance": {
+    "title": "Assistenza",
+    "description": "Contatta il supporto o consulta le FAQ."
+  },
+  "profile": {
+    "title": "Il tuo profilo",
+    "username": "Nome utente",
+    "bio": "Biografia",
+    "uploadImage": "Carica immagine",
+    "deleteImage": "Elimina immagine",
+    "edit": "Modifica profilo",
+    "save": "Salva",
+    "cancel": "Annulla",
+    "imageUploadSuccess": "Immagine caricata con successo",
+    "imageUploadError": "Errore durante il caricamento dell'immagine",
+    "imageDeleteSuccess": "Immagine eliminata con successo",
+    "imageDeleteError": "Errore durante l'eliminazione dell'immagine",
+    "updateSuccess": "Profilo aggiornato con successo",
+    "updateError": "Errore durante l'aggiornamento del profilo",
+    "usernameRequired": "Il nome utente è obbligatorio",
+    "imageSizeError": "L'immagine deve essere inferiore a 2MB",
+    "imageTypeError": "È possibile caricare solo immagini",
+    "noBio": "Nessuna biografia impostata"
+  },
+  "navbar": {
+    "search": "Cerca...",
+    "toggleLight": "Passa al tema chiaro",
+    "toggleDark": "Passa al tema scuro"
+  },
+  "backToDashboard": "Torna alla Dashboard",
+  "messageInput": {
+    "caricamento": "Caricamento in corso...",
+    "allega": "Allega file",
+    "scrivi": "Scrivi un messaggio...",
+    "invia": "Invia messaggio",
+    "utenti": "Utenti Online",
+    "nessunUtente": "Nessun altro utente online",
+    "chatGlobale": "Chat globale"
   }
+}

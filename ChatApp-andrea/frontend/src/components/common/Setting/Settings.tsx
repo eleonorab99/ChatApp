@@ -1,19 +1,21 @@
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Globe, Palette, Bell, Lock, HelpCircle} from "lucide-react";
+import { Globe, Lock, HelpCircle, User} from "lucide-react";
 import PaginaLingua from "./components/PageLanguages";
 import PaginaPrivacy from "./components/PagePrivacy";
 import PaginaAssistenza from "./components/PageAssistance";
-import { Box, Drawer, Typography, List, ListItemButton, ListItemIcon, ListItemText, Button} from "@mui/material";
+import PaginaProfilo from "./components/PageProfile";
+import { Box,  Typography, List, ListItemButton, ListItemIcon, ListItemText, Button} from "@mui/material";
 import { Home } from "@mui/icons-material";
 
 function PaginaImpostazioni() {
     const { t } = useTranslation();
-    const [paginaAttiva, setPaginaAttiva] = useState("lingua");
+    const [paginaAttiva, setPaginaAttiva] = useState("profilo");
     const navigate = useNavigate();
   
     const menuItems = [
+      { id: "profilo", nome: t('settings.profile'), icona: <User size={20} /> },
       { id: "lingua", nome: t('settings.language'), icona: <Globe size={20} /> },
       { id: "privacy", nome: t('settings.privacy'), icona: <Lock size={20} /> },
       { id: "assistenza", nome: t('settings.assistance'), icona: <HelpCircle size={20} /> },
@@ -21,6 +23,8 @@ function PaginaImpostazioni() {
   
     const renderPagina = () => {
       switch (paginaAttiva) {
+        case "profilo":
+          return <PaginaProfilo />;
         case "lingua":
           return <PaginaLingua />;
         case "privacy":
@@ -28,7 +32,7 @@ function PaginaImpostazioni() {
         case "assistenza":
           return <PaginaAssistenza />;
         default:
-          return <PaginaLingua />;
+          return <PaginaProfilo />;
       }
     };
   
@@ -70,7 +74,7 @@ function PaginaImpostazioni() {
             </List>
             <Button
               startIcon={<Home />}
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/')}
               sx={{
                 width: '100%',
                 justifyContent: 'flex-start',
@@ -96,4 +100,3 @@ function PaginaImpostazioni() {
 }
 
 export default PaginaImpostazioni;
-  

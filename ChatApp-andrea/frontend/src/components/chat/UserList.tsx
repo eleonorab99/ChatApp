@@ -11,8 +11,9 @@ import {
   Badge,
   CircularProgress,
   Button,
+  Tooltip
 } from '@mui/material';
-import { AccountCircle, Refresh } from '@mui/icons-material';
+import { Refresh } from '@mui/icons-material';
 import useChat from '../../hooks/useChat';
 import useAuth from '../../hooks/useAuth';
 import { Contact } from '../../types/user.types';
@@ -196,8 +197,12 @@ const UserList: React.FC = () => {
                             />
                           }
                         >
-                          <Avatar>
-                            <AccountCircle />
+                          <Avatar
+                            src={contact.profileImage || undefined}
+                            alt={contact.username}
+                            sx={{ bgcolor: '#ffd700' }} // Colore di fallback se non c'è immagine
+                          >
+                            {!contact.profileImage && contact.username.charAt(0).toUpperCase()}
                           </Avatar>
                         </Badge>
                       </ListItemAvatar>
@@ -223,19 +228,40 @@ const UserList: React.FC = () => {
                           </Box>
                         }
                         secondary={
-                          <Typography 
-                            variant="body2" 
-                            component="span"
-                            sx={{ 
-                              color: 'text.secondary',
-                              fontStyle: !contact.isOnline ? 'italic' : 'normal',
-                              fontSize: '0.75rem'
-                            }}
-                          >
-                            {contact.isOnline 
-                              ? 'Online' 
-                              : (contact.lastSeen ? formatLastSeen(contact.lastSeen) : 'Offline')}
-                          </Typography>
+                          <>
+                            {contact.bio && (
+                              <Tooltip title={contact.bio} arrow>
+                                <Typography
+                                  variant="body2"
+                                  component="span"
+                                  sx={{
+                                    display: 'block',
+                                    color: 'text.secondary',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    maxWidth: 180
+                                  }}
+                                >
+                                  {contact.bio}
+                                </Typography>
+                              </Tooltip>
+                            )}
+                            <Typography 
+                              variant="body2" 
+                              component="span"
+                              sx={{ 
+                                display: 'block',
+                                color: 'text.secondary',
+                                fontStyle: !contact.isOnline ? 'italic' : 'normal',
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              {contact.isOnline 
+                                ? 'Online' 
+                                : (contact.lastSeen ? formatLastSeen(contact.lastSeen) : 'Offline')}
+                            </Typography>
+                          </>
                         }
                       />
                     </ListItemButton>

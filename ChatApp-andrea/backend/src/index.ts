@@ -17,6 +17,7 @@ import testRoutes from "./routes/test.routes";
 import authRoutes from "./routes/auth.routes";
 import usersRoutes from "./routes/users.routes";
 import chatRoutes from "./routes/chat.routes";
+import profileRoutes from "./routes/profile.routes";
 
 // Carica le variabili d'ambiente (con path esplicito)
 const envPath = path.resolve(__dirname, "../.env");
@@ -97,7 +98,9 @@ const port = requiredEnvVars.PORT;
 app.use((req: Request, res: Response, next: NextFunction): void => {
   const allowedOrigins = [
     "http://localhost:5173",
+    "http://localhost:5174", // Aggiungiamo la nuova porta 5174
     "https://localhost:5173",
+    "https://localhost:5174", // Anche la versione HTTPS
     process.env.FRONTEND_URL, // URL del frontend in produzione
     process.env.FRONTEND_DEV_URL // URL del frontend in sviluppo
   ].filter(Boolean); // Rimuove i valori undefined
@@ -187,19 +190,26 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/test", testRoutes);
+app.use("/api/profile", profileRoutes); // Aggiungi le rotte per il profilo
 
 // Endpoint per i contatti
 app.get("/api/contacts", authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
+    
     if (!userId) {
       res.status(400).json({ message: 'ID utente mancante' });
       return;
     }
 
-    // Trova tutti gli utenti con cui l'utente corrente ha scambiato messaggi
+    // Utilizziamo una query SQL raw per evitare problemi di tipizzazione con i nuovi campi
     const contacts = await prisma.$queryRaw`
-        SELECT DISTINCT u.id as userId, u.username, u.email
+        SELECT DISTINCT 
+            u.id as userId, 
+            u.username, 
+            u.email, 
+            u.profileImage, 
+            u.bio
         FROM User u
         WHERE u.id IN (
             SELECT DISTINCT m.senderId 
@@ -221,11 +231,6 @@ app.get("/api/contacts", authenticate, async (req: Request, res: Response): Prom
           id: {
             not: userId
           }
-        },
-        select: {
-          id: true,
-          username: true,
-          email: true
         }
       });
 
@@ -233,6 +238,8 @@ app.get("/api/contacts", authenticate, async (req: Request, res: Response): Prom
       const formattedUsers = allUsers.map(user => ({
         userId: user.id,
         username: user.username,
+        profileImage: user.profileImage,
+        bio: user.bio,
         isOnline: false
       }));
 
@@ -245,6 +252,8 @@ app.get("/api/contacts", authenticate, async (req: Request, res: Response): Prom
       ? contacts.map((contact: any) => ({
           userId: contact.userId,
           username: contact.username,
+          profileImage: contact.profileImage,
+          bio: contact.bio,
           isOnline: false, // Questo verrà aggiornato dal frontend
         }))
       : [];
@@ -493,7 +502,9 @@ function setupWebSocketServer(server: http.Server | https.Server) {
       const origin = info.origin || info.req.headers.origin;
       const allowedOrigins = [
         "http://localhost:5173",
+        "http://localhost:5174", // Aggiungiamo anche qui la porta 5174
         "https://localhost:5173",
+        "https://localhost:5174",
       ];
 
       if (!origin || allowedOrigins.includes(origin)) {
@@ -506,7 +517,7 @@ function setupWebSocketServer(server: http.Server | https.Server) {
   });
 
   // Mappa per tenere traccia degli utenti online
-  const onlineUsers = new Map<number, { userId: number; username: string }>();
+  const onlineUsers = new Map<number, { userId: number; username: string; profileImage?: string | null; bio?: string | null }>();
 
   // Funzione per inviare la lista degli utenti online a tutti i client
   const sendOnlineUsers = () => {
@@ -548,10 +559,16 @@ function setupWebSocketServer(server: http.Server | https.Server) {
         extWs.userId = userId;
 
         // Ottieni le informazioni dell'utente dal database
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { id: true, username: true },
-        });
+        // Utilizziamo una query raw per evitare problemi di tipizzazione
+        const userResult = await prisma.$queryRaw`
+          SELECT id, username, profileImage, bio 
+          FROM User 
+          WHERE id = ${userId}
+        `;
+        
+        const user = Array.isArray(userResult) && userResult.length > 0 
+          ? userResult[0] as { id: number; username: string; profileImage?: string | null; bio?: string | null }
+          : null;
 
         if (!user) {
           console.error("Utente non trovato:", userId);
@@ -563,7 +580,12 @@ function setupWebSocketServer(server: http.Server | https.Server) {
         console.log("Utente connesso:", user.username, "(ID:", userId, ")");
 
         // Aggiungi l'utente alla mappa degli utenti online
-        onlineUsers.set(userId, { userId: user.id, username: user.username });
+        onlineUsers.set(userId, { 
+          userId: user.id, 
+          username: user.username,
+          profileImage: user.profileImage || null,
+          bio: user.bio || null 
+        });
 
         // Invia la lista aggiornata degli utenti online a tutti i client
         sendOnlineUsers();

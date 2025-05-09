@@ -9,7 +9,8 @@ type AuthAction =
   | { type: 'AUTH_SUCCESS'; payload: { user: User; token: string } }
   | { type: 'AUTH_FAILURE'; payload: string }
   | { type: 'AUTH_LOGOUT' }
-  | { type: 'AUTH_CHECK_COMPLETE' };
+  | { type: 'AUTH_CHECK_COMPLETE' }
+  | { type: 'UPDATE_USER_INFO'; payload: User }; // Nuova azione per aggiornare le info utente
 
 // Stato iniziale
 const initialState: AuthState = {
@@ -61,6 +62,11 @@ const authReducer = (state: AuthState, action: AuthAction): AuthState => {
         ...state,
         loading: false,
       };
+    case 'UPDATE_USER_INFO':
+      return {
+        ...state,
+        user: action.payload,
+      };
     default:
       return state;
   }
@@ -71,6 +77,7 @@ interface AuthContextType extends AuthState {
   login: (data: LoginData) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
+  updateUserInfo: (updatedUser: User) => void; // Nuova funzione per aggiornare le info utente
 }
 
 // Crea il contesto di autenticazione
@@ -79,6 +86,7 @@ export const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   register: async () => {},
   logout: async () => {},
+  updateUserInfo: () => {}, // Implementazione vuota di default
 });
 
 // Provider per il contesto di autenticazione
@@ -202,6 +210,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       dispatch({ type: 'AUTH_LOGOUT' });
     }
   };
+  
+  // Funzione per aggiornare le informazioni utente
+  const updateUserInfo = (updatedUser: User): void => {
+    // Aggiorna le informazioni utente nel contesto
+    dispatch({ type: 'UPDATE_USER_INFO', payload: updatedUser });
+    
+    // Aggiorna anche nel localStorage
+    if (state.user) {
+      const mergedUser = { ...state.user, ...updatedUser };
+      localStorage.setItem('user', JSON.stringify(mergedUser));
+      authService.updateUserInfo(mergedUser);
+    }
+  };
 
   // Valore del contesto
   const authContextValue: AuthContextType = {
@@ -209,6 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     login,
     register,
     logout,
+    updateUserInfo
   };
 
   return (

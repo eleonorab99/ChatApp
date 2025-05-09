@@ -1,17 +1,14 @@
 import React, { useRef, useEffect } from 'react';
-import { Box, Typography, Paper, Divider, CircularProgress } from '@mui/material';
+import { Box, Typography, Divider, CircularProgress } from '@mui/material';
 import useChat from '../../hooks/useChat';
-import useAuth from '../../hooks/useAuth';
 import { Message } from '../../types/chat.types';
-import { formatTime } from '../../utils/formatters';
-import FilePreview from './FilePreview';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
+import MessageItem from './MessageItem';
 
 // Componente per visualizzare la lista dei messaggi
 const MessageList: React.FC = () => {
   const { messages, loading, currentRecipient } = useChat();
-  const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll automatico verso l'ultimo messaggio
@@ -28,68 +25,6 @@ const MessageList: React.FC = () => {
   const currentMessages = currentRecipient 
     ? (messages[currentRecipient.userId] || [])
     : [];
-
-  // Componente per un singolo messaggio
-  const MessageItem: React.FC<{ message: Message }> = ({ message }) => {
-    const isSender = user?.id === message.senderId;
-    
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: isSender ? 'flex-end' : 'flex-start',
-          mb: 2,
-        }}
-      >
-        <Paper
-          elevation={1}
-          sx={{
-            p: 2,
-            maxWidth: '70%',
-            borderRadius: 2,
-            backgroundColor: isSender ? 'primary.light' : 'background.paper',
-            color: isSender ? 'black' : 'text.primary',
-          }}
-        >
-          {!isSender && (
-            <Typography variant="subtitle2" fontWeight="bold" component="div">
-              {message.sender.username}
-            </Typography>
-          )}
-          
-          {message.content && (
-            <Typography variant="body1" component="div">
-              {message.content}
-            </Typography>
-          )}
-          
-          {message.fileUrl && (
-            <Box sx={{ mt: message.content ? 1 : 0 }}>
-              <FilePreview 
-                fileUrl={message.fileUrl}
-                fileName={message.fileName || undefined}
-                fileType={message.fileType || undefined}
-                fileSize={message.fileSize || undefined}
-                isPreviewOnly={true}
-              />
-            </Box>
-          )}
-          
-          <Typography 
-            variant="caption" 
-            component="div"
-            sx={{ 
-              mt: 0.5, 
-              textAlign: 'right',
-              opacity: 0.8
-            }}
-          >
-            {formatTime(new Date(message.createdAt))}
-          </Typography>
-        </Paper>
-      </Box>
-    );
-  };
 
   // Visualizza una data di separazione tra i messaggi
   const DateDivider: React.FC<{ date: Date }> = ({ date }) => (

@@ -14,6 +14,7 @@ import {
 import {
   Visibility,
   VisibilityOff,
+  Login as LoginIcon,
 } from '@mui/icons-material';
 import useAuth from '../../../hooks/useAuth';
 import useApp from '../../../hooks/useApp';
@@ -227,6 +228,16 @@ const Register: React.FC = () => {
             >
               Registrati
             </Button>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+              <Button
+                onClick={navigateToLogin}
+                color="primary"
+                startIcon={<LoginIcon />}
+                sx={{ textTransform: 'none' }}
+              >
+                Hai già un account? Accedi
+              </Button>
+            </Box>
           </Box>
         </Paper>
       </Box>
